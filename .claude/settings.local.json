@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-turbopack)",
+      "Bash(npm --version)",
+      "Bash(export PATH=\"/usr/local/bin:/usr/bin:/opt/homebrew/bin:$PATH\")",
+      "Read(//opt/**)",
+      "Bash(zsh -l -c \"which node && node --version\")",
+      "Bash(zsh -l -c 'echo $PATH')",
+      "Bash(npx tsc *)",
+      "Bash(npm install *)",
+      "Bash(npx next *)",
+      "Bash(curl -s http://localhost:3001/api/chat -X POST -H \"Content-Type: application/json\" -d '{\"messages\":[]}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/chat)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/profile)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/insights)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/timeline)",
+      "Bash(node --input-type=module)",
+      "Bash(npm run *)"
+    ]
+  }
+}

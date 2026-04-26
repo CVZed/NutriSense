@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    /* Prevent font size inflation on mobile */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    /* Fills the entire viewport including notch/home bar area */
+    min-height: 100dvh;
+  }
+}
+
+@layer components {
+  /* Reusable form input style for profile fields */
+  .form-input {
+    @apply w-full text-sm text-gray-900 bg-transparent text-right placeholder-gray-300 focus:outline-none;
+  }
+}
+
+@layer utilities {
+  /* Safe area padding utilities for notch + home bar */
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+  }
+  .pt-safe {
+    padding-top: max(env(safe-area-inset-top), 0.5rem);
+  }
+
+  /* Hide scrollbar while preserving scroll behaviour (quick-log pill row) */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}
