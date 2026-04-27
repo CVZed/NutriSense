@@ -7,8 +7,10 @@ import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
 import ChatInput from "./ChatInput";
 import LogEntryCard from "./LogEntryCard";
+import BarcodeScanner from "./BarcodeScanner";
 import type { Message } from "ai";
 import type { QuickLogButton } from "@/types/database";
+import type { BarcodeResult } from "@/app/api/barcode/route";
 
 type LogEntry = Record<string, unknown>;
 
@@ -48,6 +50,10 @@ export default function ChatInterface({
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  // ── Barcode scanner state ─────────────────────────────────────────────────
+  const [showScanner, setShowScanner] = useState(false);
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
 
   function handleImageSelect(file: File | null) {
     if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
@@ -96,6 +102,45 @@ export default function ChatInterface({
       if (newEntries.length > 0) setCurrentLogEntries(newEntries);
     }
   }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Barcode detected → look up nutrition → send to AI ────────────────────
+  const handleBarcodeDetected = useCallback(async (barcode: string) => {
+    setShowScanner(false);
+    setBarcodeLoading(true);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    try {
+      const res = await fetch(`/api/barcode?upc=${encodeURIComponent(barcode)}`);
+      const barcodeData: BarcodeResult = await res.json();
+
+      let message: string;
+      if (barcodeData.found && barcodeData.name) {
+        const parts: string[] = [];
+        if (barcodeData.brand) parts.push(`Brand: ${barcodeData.brand}`);
+        if (barcodeData.servingSize) parts.push(`Serving: ${barcodeData.servingSize}`);
+        if (barcodeData.calories != null) parts.push(`${barcodeData.calories} cal`);
+        if (barcodeData.protein_g != null) parts.push(`${barcodeData.protein_g}g protein`);
+        if (barcodeData.carbs_g != null) parts.push(`${barcodeData.carbs_g}g carbs`);
+        if (barcodeData.fat_g != null) parts.push(`${barcodeData.fat_g}g fat`);
+
+        message = `I scanned a barcode. Product: ${barcodeData.name}${parts.length ? ` (${parts.join(", ")})` : ""}. Please log this as food.`;
+      } else {
+        message = `I scanned a food barcode: ${barcode}. I couldn't find it in the database — can you help me log it?`;
+      }
+
+      void append(
+        { role: "user", content: message },
+        { body: { sessionId, timezone: tz } }
+      );
+    } catch {
+      void append(
+        { role: "user", content: `I scanned a food barcode: ${barcode}. Please help me log it.` },
+        { body: { sessionId, timezone: tz } }
+      );
+    } finally {
+      setBarcodeLoading(false);
+    }
+  }, [append, sessionId]);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -176,6 +221,13 @@ export default function ChatInterface({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Barcode scanner overlay */}
+      {showScanner && (
+        <BarcodeScanner
+          onDetected={handleBarcodeDetected}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
       {/* Header */}
       <div className="bg-white border-b border-gray-100 px-4 py-3 pt-safe flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center">
@@ -251,11 +303,12 @@ export default function ChatInterface({
         input={input}
         onInputChange={handleInputChange}
         onSubmit={handleFormSubmit}
-        isLoading={isLoading}
+        isLoading={isLoading || barcodeLoading}
         pendingImage={pendingImage}
         imagePreviewUrl={imagePreviewUrl}
         onImageSelect={handleImageSelect}
         isUploading={isUploading}
+        onBarcodeScan={() => setShowScanner(true)}
       />
     </div>
   );

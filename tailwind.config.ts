@@ -43,6 +43,16 @@ const config: Config = {
         "safe-top": "env(safe-area-inset-top)",
         "safe-bottom": "env(safe-area-inset-bottom)",
       },
+      keyframes: {
+        "scan-line": {
+          "0%":   { top: "0%" },
+          "50%":  { top: "calc(100% - 2px)" },
+          "100%": { top: "0%" },
+        },
+      },
+      animation: {
+        "scan-line": "scan-line 2s ease-in-out infinite",
+      },
     },
   },
   plugins: [],

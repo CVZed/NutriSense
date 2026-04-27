@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useRef } from "react";
-import { Send, Camera, X } from "lucide-react";
+import { Send, Camera, X, ScanBarcode } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -14,6 +14,7 @@ interface ChatInputProps {
   imagePreviewUrl: string | null;
   onImageSelect: (file: File | null) => void;
   isUploading?: boolean;
+  onBarcodeScan?: () => void;
 }
 
 export default function ChatInput({
@@ -25,6 +26,7 @@ export default function ChatInput({
   imagePreviewUrl,
   onImageSelect,
   isUploading = false,
+  onBarcodeScan,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -114,6 +116,23 @@ export default function ChatInput({
         >
           <Camera className="w-5 h-5" />
         </button>
+
+        {/* Barcode scan button */}
+        {onBarcodeScan && (
+          <button
+            type="button"
+            onClick={onBarcodeScan}
+            disabled={busy}
+            className={cn(
+              "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+              "text-gray-400 hover:text-gray-600 hover:bg-gray-100",
+              busy && "opacity-40 cursor-not-allowed"
+            )}
+            aria-label="Scan barcode"
+          >
+            <ScanBarcode className="w-5 h-5" />
+          </button>
+        )}
 
         {/* Text input */}
         <div className="flex-1 relative bg-gray-100 rounded-2xl flex items-end">
