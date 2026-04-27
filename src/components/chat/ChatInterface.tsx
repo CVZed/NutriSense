@@ -115,17 +115,24 @@ export default function ChatInterface({
 
       let message: string;
       if (barcodeData.found && barcodeData.name) {
-        const parts: string[] = [];
-        if (barcodeData.brand) parts.push(`Brand: ${barcodeData.brand}`);
-        if (barcodeData.servingSize) parts.push(`Serving: ${barcodeData.servingSize}`);
-        if (barcodeData.calories != null) parts.push(`${barcodeData.calories} cal`);
-        if (barcodeData.protein_g != null) parts.push(`${barcodeData.protein_g}g protein`);
-        if (barcodeData.carbs_g != null) parts.push(`${barcodeData.carbs_g}g carbs`);
-        if (barcodeData.fat_g != null) parts.push(`${barcodeData.fat_g}g fat`);
-
-        message = `I scanned a barcode. Product: ${barcodeData.name}${parts.length ? ` (${parts.join(", ")})` : ""}. Please log this as food.`;
+        const lines: string[] = [
+          `I just scanned a barcode. Please call create_log_entry right now to log this as food:`,
+          `- food_name: ${barcodeData.name}`,
+        ];
+        if (barcodeData.brand) lines.push(`- brand: ${barcodeData.brand}`);
+        if (barcodeData.servingSize) lines.push(`- serving size: ${barcodeData.servingSize}`);
+        if (barcodeData.calories != null) lines.push(`- calories: ${barcodeData.calories}`);
+        if (barcodeData.protein_g != null) lines.push(`- protein_g: ${barcodeData.protein_g}`);
+        if (barcodeData.carbs_g != null) lines.push(`- carbs_g: ${barcodeData.carbs_g}`);
+        if (barcodeData.fat_g != null) lines.push(`- fat_g: ${barcodeData.fat_g}`);
+        if (barcodeData.fiber_g != null) lines.push(`- fiber_g: ${barcodeData.fiber_g}`);
+        if (barcodeData.sodium_mg != null) lines.push(`- sodium_mg: ${barcodeData.sodium_mg}`);
+        lines.push(`- data_source: text`);
+        lines.push(`- ai_confidence: high`);
+        lines.push(`(Data from barcode database — use these exact values, no need to look them up.)`);
+        message = lines.join("\n");
       } else {
-        message = `I scanned a food barcode: ${barcode}. I couldn't find it in the database — can you help me log it?`;
+        message = `I scanned a food barcode: ${barcode}. It wasn't in the database. What food is this — can you help me log it?`;
       }
 
       void append(

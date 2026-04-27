@@ -459,6 +459,17 @@ export default function LogEntryCard({ entryType, data, loggedAt, onDelete, onEd
               </div>
             </div>
           )}
+
+          {entryType === "note" && (
+            <div className="space-y-1">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {String(liveData.notes ?? liveData.description ?? liveData.raw_text ?? "Note recorded")}
+              </p>
+              {liveLoggedAt && (
+                <p className="text-[10px] text-gray-400">{fmtTime(liveLoggedAt)}</p>
+              )}
+            </div>
+          )}
         </>
       )}
 
