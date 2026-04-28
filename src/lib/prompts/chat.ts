@@ -2,7 +2,12 @@ import type { Database } from "@/types/database";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
-export function buildChatSystemPrompt(profile: Profile, currentIso: string, userTimezone = "UTC"): string {
+export function buildChatSystemPrompt(
+  profile: Profile,
+  currentIso: string,
+  userTimezone = "UTC",
+  todayEntries: Record<string, unknown>[] = [],
+): string {
   const name = profile.name ?? "there";
   const weightKg = profile.weight_kg;
 
@@ -28,10 +33,58 @@ export function buildChatSystemPrompt(profile: Profile, currentIso: string, user
     ? `\nDietary notes: ${profile.dietary_notes}`
     : "";
 
+  // Build today's log summary for context
+  const localNow = new Date(currentIso);
+  const localHour = new Date(localNow.toLocaleString("en-US", { timeZone: userTimezone })).getHours();
+  const timeOfDay = localHour < 12 ? "morning" : localHour < 17 ? "afternoon" : "evening";
+
+  let todayLogSection = "";
+  if (todayEntries.length > 0) {
+    let totalCal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+    const logLines: string[] = [];
+
+    for (const entry of todayEntries) {
+      const sd = (entry.structured_data ?? {}) as Record<string, unknown>;
+      const loggedAt = new Date(entry.logged_at as string).toLocaleTimeString("en-US", {
+        timeZone: userTimezone, hour: "numeric", minute: "2-digit", hour12: true,
+      });
+      const type = entry.entry_type as string;
+
+      if (type === "food" || type === "drink") {
+        const cal = Number(sd.calories ?? 0);
+        const p = Number(sd.protein_g ?? 0);
+        const c = Number(sd.carbs_g ?? 0);
+        const f = Number(sd.fat_g ?? 0);
+        totalCal += cal; totalProtein += p; totalCarbs += c; totalFat += f;
+        logLines.push(`- ${loggedAt}: [${type}] ${sd.name ?? "item"} — ${Math.round(cal)} cal, ${Math.round(p)}g protein`);
+      } else if (type === "exercise") {
+        logLines.push(`- ${loggedAt}: [exercise] ${sd.activity_type ?? "workout"} — ${sd.duration_min ?? "?"}min, ${Math.round(Number(sd.calories_burned_est ?? 0))} cal burned`);
+      } else if (type === "sleep") {
+        logLines.push(`- ${loggedAt}: [sleep] ${sd.duration_min ? `${Math.round(Number(sd.duration_min) / 60 * 10) / 10}h` : "logged"}`);
+      } else if (type === "symptom") {
+        logLines.push(`- ${loggedAt}: [symptom] ${sd.symptom_name ?? "symptom"}`);
+      } else if (type === "mood") {
+        logLines.push(`- ${loggedAt}: [mood] ${sd.mood_label ?? "logged"}`);
+      } else {
+        logLines.push(`- ${loggedAt}: [${type}] ${sd.notes ?? sd.description ?? ""}`);
+      }
+    }
+
+    const remaining = profile.calorie_goal ? profile.calorie_goal - totalCal : null;
+    todayLogSection = `\n## TODAY'S LOG (so far today in ${userTimezone})
+${logLines.join("\n")}
+Running totals: ${Math.round(totalCal)} cal | ${Math.round(totalProtein)}g protein | ${Math.round(totalCarbs)}g carbs | ${Math.round(totalFat)}g fat${remaining !== null ? `\nRemaining to goal: ${Math.round(remaining)} cal` : ""}
+
+IMPORTANT: You already know all of the above has been logged today. Do NOT greet the user as if it's the start of their day or ask about meals they have clearly already logged. Be aware of what time of day it is (${timeOfDay}) and what the user has already eaten.`;
+  } else {
+    todayLogSection = `\n## TODAY'S LOG\nNothing logged yet today. It is currently ${timeOfDay} in the user's timezone.`;
+  }
+
   return `You are NutriSense, a warm and knowledgeable conversational health assistant. You are talking with ${name}, who is focused on ${goalDesc}.
 
 ## User profile
 ${targets ? `Daily targets: ${targets}` : ""}${weightKg ? `\nWeight: ${weightKg}kg (use this for calorie burn estimates)` : ""}${dietaryContext}
+${todayLogSection}
 
 ## Your job
 Help ${name} log everything — food, drink, exercise, sleep, symptoms, and mood — by extracting structured data from their natural language messages and saving it using your tools.
@@ -93,6 +146,11 @@ When the user sends a photo:
 - Only ask if the answer meaningfully changes the data (e.g., portion size for calorie-dense foods, timing for sleep).
 - If still ambiguous after one question, make a reasonable estimate and flag confidence as "low".
 - After logging a meal, occasionally (not every time) ask: "How are you feeling / energy level?"
+
+## CRITICAL — AFTER A CLARIFYING QUESTION
+- If you asked the user a question in a previous message (e.g. "How many servings?") and the user has now replied with an answer, you MUST call create_log_entry IMMEDIATELY in this response. Do NOT ask another question first. Do NOT say "let me log that" without actually calling the tool.
+- If the user's reply is a number, portion, or any direct answer to your previous question, treat it as the answer and log right away.
+- Never leave the user hanging after they answer — always follow an answer with an immediate tool call.
 
 ---
 

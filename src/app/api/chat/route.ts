@@ -135,9 +135,23 @@ export async function POST(req: Request) {
     ];
   }
 
+  // ── Today's log entries for context injection ─────────────────────────────
+  let todayEntries: Record<string, unknown>[] = [];
+  if (!isOnboarding) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { data: entries } = await adminSupabase
+      .from("log_entries")
+      .select("entry_type, logged_at, structured_data")
+      .eq("user_id", user.id)
+      .gte("logged_at", todayStart.toISOString())
+      .order("logged_at", { ascending: true });
+    todayEntries = entries ?? [];
+  }
+
   const systemPrompt = isOnboarding
     ? ONBOARDING_SYSTEM_PROMPT
-    : buildChatSystemPrompt(profile as Profile, new Date().toISOString(), resolvedTimezone);
+    : buildChatSystemPrompt(profile as Profile, new Date().toISOString(), resolvedTimezone, todayEntries);
 
   const createdEntryIds: string[] = [];
   const streamedEntries: Record<string, unknown>[] = [];

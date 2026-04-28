@@ -46,7 +46,8 @@ export default function ChatInput({
     const ta = textareaRef.current;
     if (ta) {
       ta.style.height = "auto";
-      ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
+      // Cap at 5 lines (~100px) so the input never dominates the screen on mobile
+      ta.style.height = `${Math.min(ta.scrollHeight, 100)}px`;
     }
   }
 
@@ -61,7 +62,7 @@ export default function ChatInput({
   const canSend = (input.trim().length > 0 || !!pendingImage) && !busy;
 
   return (
-    <div className="bg-white border-t border-gray-100 px-3 py-3 pb-safe">
+    <div className="bg-white border-t border-gray-100 px-3 py-2 pb-safe flex-shrink-0">
       {/* Image preview strip */}
       {imagePreviewUrl && (
         <div className="mb-2 flex items-start gap-2">
@@ -144,7 +145,7 @@ export default function ChatInput({
             placeholder={pendingImage ? "Add a note (optional)…" : "Log food, exercise, sleep, mood…"}
             rows={1}
             disabled={busy}
-            className="flex-1 resize-none bg-transparent px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none max-h-[120px] leading-relaxed"
+            className="flex-1 resize-none bg-transparent px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none max-h-[100px] overflow-y-auto leading-relaxed"
           />
         </div>
 

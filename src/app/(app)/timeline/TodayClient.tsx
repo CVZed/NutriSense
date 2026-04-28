@@ -489,8 +489,8 @@ export default function TodayClient({
     return pts;
   }, [entries, windowStartMs, totalMs, todayStartMs]);
 
-  // Wake time offset — end of the most recent sleep entry in the window.
-  // Falls back to local midnight (start of today) so the exercise line always has a reset point.
+  // Wake time offset — end of the most recent sleep entry in the window (kept for future use).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const wakeTimeOffset = useMemo(() => {
     const sleepEntries = entries
       .filter(e => e.entry_type === "sleep")
@@ -509,20 +509,21 @@ export default function TodayClient({
     return Math.max(0, Math.min(totalMs, midnight.getTime() - windowStartMs));
   }, [entries, windowStartMs, totalMs]);
 
-  // Exercise step line: starts at [wakeTimeOffset, bmr], steps up (bmr + cumulative burned),
-  // and resets the exercise portion back to bmr at midnight.
+  // Exercise step line: starts at window start with BMR baseline, steps up with each
+  // exercise entry across the full 24h window, resets the exercise portion at midnight.
   const exercisePts = useMemo<[number, number][]>(() => {
     if (bmr === 0) return [];
     const midnightOffset = Math.max(0, Math.min(totalMs, todayStartMs - windowStartMs));
     const exercises = entries
       .filter(e => e.entry_type === "exercise")
       .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime());
-    const pts: [number, number][] = [[wakeTimeOffset, bmr]];
+    // Start at the beginning of the 24h window at the BMR baseline
+    const pts: [number, number][] = [[0, bmr]];
     let cumBurned = 0;
     let midnightInserted = false;
     for (const e of exercises) {
       const t = new Date(e.logged_at).getTime() - windowStartMs;
-      if (t < wakeTimeOffset || t > totalMs) continue;
+      if (t < 0 || t > totalMs) continue;
       // Drop exercise portion back to 0 (line returns to bmr) at midnight
       if (!midnightInserted && t >= midnightOffset) {
         pts.push([midnightOffset, bmr + cumBurned]); // hold yesterday's total up to midnight
@@ -536,14 +537,14 @@ export default function TodayClient({
       cumBurned += burned;
       pts.push([t, bmr + cumBurned]);
     }
-    if (!midnightInserted && midnightOffset > wakeTimeOffset && midnightOffset < totalMs) {
+    if (!midnightInserted && midnightOffset > 0 && midnightOffset < totalMs) {
       pts.push([midnightOffset, bmr + cumBurned]);
       pts.push([midnightOffset, bmr]);
       cumBurned = 0;
     }
     pts.push([totalMs, bmr + cumBurned]);
     return pts;
-  }, [entries, bmr, windowStartMs, totalMs, wakeTimeOffset, todayStartMs]);
+  }, [entries, bmr, windowStartMs, totalMs, todayStartMs]);
 
   const maxCal = useMemo(() => {
     const c = consumedPts[consumedPts.length - 1]?.[1] ?? 0;
