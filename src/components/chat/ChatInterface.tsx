@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo, type ChangeEvent } from "react";
 import { useChat } from "ai/react";
 import { createClient } from "@/lib/supabase/client";
 import MessageBubble from "./MessageBubble";
@@ -102,6 +102,23 @@ export default function ChatInterface({
       if (newEntries.length > 0) setCurrentLogEntries(newEntries);
     }
   }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Smart contextual chips ────────────────────────────────────────────────
+  const smartChips = useMemo(() => {
+    const hour = new Date().getHours();
+    let mealLabel = "🍽️ Suggest a meal";
+    let mealMsg = "What should I eat? Ask me what I have available, then suggest 2–3 meal options that fit my remaining macros and calories for today.";
+    if (hour >= 5  && hour < 10) { mealLabel = "🌅 Suggest breakfast"; mealMsg = "What should I have for breakfast? Ask me what I have available, then suggest 2–3 options that fit my remaining macros for today."; }
+    else if (hour >= 10 && hour < 12) { mealLabel = "🍳 Suggest brunch";    mealMsg = "What should I have for brunch? Ask me what I have available, then suggest 2–3 options that fit my remaining macros for today."; }
+    else if (hour >= 12 && hour < 15) { mealLabel = "☀️ Suggest lunch";     mealMsg = "What should I have for lunch? Ask me what I have available, then suggest 2–3 options that fit my remaining macros for today."; }
+    else if (hour >= 15 && hour < 18) { mealLabel = "🍎 Suggest a snack";   mealMsg = "What should I snack on? Ask me what I have available, then suggest 2–3 options that fit my remaining macros for today."; }
+    else if (hour >= 18 && hour < 21) { mealLabel = "🌙 Suggest dinner";    mealMsg = "What should I make for dinner? Ask me what I have available, then suggest 2–3 options that fit my remaining macros for today."; }
+    return [
+      { label: mealLabel,            message: mealMsg },
+      { label: "💧 Log water",        message: "I just had a glass of water." },
+      { label: "📊 Daily check-in",   message: "How am I tracking today? Give me a quick overview of my calories and macros." },
+    ];
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Barcode detected → look up nutrition → send to AI ────────────────────
   const handleBarcodeDetected = useCallback(async (barcode: string) => {
@@ -279,18 +296,38 @@ export default function ChatInterface({
         <div ref={bottomRef} />
       </div>
 
-      {/* Quick-log buttons */}
+      {/* Smart contextual chips — visible when input is empty */}
+      {onboardingComplete && !input.trim() && !isLoading && (
+        <div className="bg-white border-t border-gray-100 px-3 pt-2 pb-1 flex gap-2 overflow-x-auto no-scrollbar">
+          {smartChips.map((chip) => (
+            <button
+              key={chip.label}
+              disabled={isLoading}
+              onClick={() => {
+                if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(10);
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                void append(
+                  { role: "user", content: chip.message },
+                  { body: { sessionId, timezone: tz } }
+                );
+              }}
+              className="flex-shrink-0 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-700 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap disabled:opacity-40"
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Quick-log buttons (user-configured) */}
       {onboardingComplete && quickLogButtons.filter(b => b.enabled).length > 0 && (
-        <div className="bg-white border-t border-gray-100 px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar">
+        <div className="bg-white px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar">
           {quickLogButtons.filter(b => b.enabled).map(btn => (
             <button
               key={btn.id}
               disabled={isLoading}
               onClick={() => {
-                // Subtle haptic tap on supported devices (Android Chrome, etc.)
-                if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-                  navigator.vibrate(10);
-                }
+                if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(10);
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
                 void append(
                   { role: "user", content: btn.message },
