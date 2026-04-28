@@ -120,11 +120,56 @@ function LegendIcon({ type }: { type: string }) {
   );
 }
 
+// ── Meal clustering ───────────────────────────────────────────────────────────
+const MEAL_GAP_MS = 90 * 60 * 1000; // 90 min gap → new meal
+
+function getMealLabel(hour: number): { name: string; emoji: string } {
+  if (hour >= 5  && hour < 10) return { name: "Breakfast",       emoji: "🌅" };
+  if (hour >= 10 && hour < 12) return { name: "Brunch",          emoji: "🍳" };
+  if (hour >= 12 && hour < 15) return { name: "Lunch",           emoji: "☀️" };
+  if (hour >= 15 && hour < 18) return { name: "Snack",           emoji: "🍎" };
+  if (hour >= 18 && hour < 21) return { name: "Dinner",          emoji: "🌙" };
+  return                               { name: "Late Night Snack", emoji: "🌃" };
+}
+
+interface MealCluster {
+  id: string;
+  name: string;
+  emoji: string;
+  startTime: string;
+  entries: LogEntry[];
+  totalCal: number;
+}
+
+function clusterMeals(src: LogEntry[], tz: string): MealCluster[] {
+  const food = [...src]
+    .filter(e => e.entry_type === "food" || e.entry_type === "drink")
+    .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime());
+  if (!food.length) return [];
+
+  const groups: LogEntry[][] = [[food[0]]];
+  for (let i = 1; i < food.length; i++) {
+    const gap = new Date(food[i].logged_at).getTime() - new Date(food[i - 1].logged_at).getTime();
+    if (gap > MEAL_GAP_MS) groups.push([food[i]]);
+    else groups[groups.length - 1].push(food[i]);
+  }
+
+  return groups.map((entries, idx) => {
+    const localDate = new Date(new Date(entries[0].logged_at).toLocaleString("en-US", { timeZone: tz }));
+    const { name, emoji } = getMealLabel(localDate.getHours());
+    const totalCal = entries.reduce((s, e) => {
+      const sd = (e.structured_data ?? {}) as Record<string, number>;
+      return s + (Number(sd.calories) || 0);
+    }, 0);
+    return { id: `meal-${idx}-${entries[0].id}`, name, emoji, startTime: entries[0].logged_at, entries, totalCal };
+  });
+}
+
 // ── Entry group header ────────────────────────────────────────────────────────
-const GROUP_ORDER = ["food", "drink", "exercise", "sleep", "symptom", "mood", "note"];
+// Food/drink removed — they're shown as meal clusters
+const GROUP_ORDER = ["exercise", "sleep", "symptom", "mood", "note"];
 const GROUP_LABELS: Record<string, string> = {
-  food: "Food", drink: "Drinks", exercise: "Exercise",
-  sleep: "Sleep", symptom: "Symptoms", mood: "Mood", note: "Notes",
+  exercise: "Exercise", sleep: "Sleep", symptom: "Symptoms", mood: "Mood", note: "Notes",
 };
 
 function SectionLabel({ label }: { label: string }) {
@@ -381,6 +426,57 @@ function TimelineChart({
   );
 }
 
+// ── Meal section ─────────────────────────────────────────────────────────────
+function MealSection({
+  meal,
+  onDelete,
+  onEdit,
+}: {
+  meal: MealCluster;
+  onDelete: (id: string) => void;
+  onEdit: (id: string, updated: Record<string, unknown>, newLoggedAt?: string) => void;
+}) {
+  const timeStr = new Date(meal.startTime).toLocaleTimeString("en-US", {
+    hour: "numeric", minute: "2-digit", hour12: true,
+  });
+
+  return (
+    <div className="mt-2">
+      {/* Meal header */}
+      <div className="flex items-center gap-2 px-4 pt-3 pb-1.5">
+        <span className="text-base leading-none">{meal.emoji}</span>
+        <span className="text-xs font-semibold text-gray-700">{meal.name}</span>
+        <span className="text-[10px] text-gray-400">{timeStr}</span>
+        <div className="flex-1 h-px bg-gray-100" />
+        {meal.totalCal > 0 && (
+          <span className="text-[10px] font-semibold text-green-600 flex-shrink-0">
+            {Math.round(meal.totalCal)} cal
+          </span>
+        )}
+      </div>
+
+      {/* Entries inside this meal */}
+      <div className="px-4 space-y-2">
+        {meal.entries.map((entry) => (
+          <LogEntryCard
+            key={entry.id}
+            entryType={entry.entry_type}
+            data={{
+              entry_id: entry.id,
+              raw_image_url: entry.raw_image_url,
+              ...(entry.structured_data as Record<string, unknown>),
+            }}
+            loggedAt={entry.logged_at}
+            onDelete={() => onDelete(entry.id)}
+            onEdit={(updated, newLoggedAt) => onEdit(entry.id, updated, newLoggedAt)}
+            swipeable
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function TodayClient({
   entries: initialEntries, goals, bmr, windowStartIso, nowIso, todayLabel,
@@ -552,7 +648,11 @@ export default function TodayClient({
     return Math.max(c, ex, bmr, goals.calories, 400) * 1.15;
   }, [consumedPts, exercisePts, bmr, goals.calories]);
 
-  // Group a set of entries by type (newest first within each type)
+  // Meal clusters (food + drink, time-proximity grouped)
+  const todayMeals     = useMemo(() => clusterMeals(todayEntries,     "UTC"), [todayEntries]);
+  const yesterdayMeals = useMemo(() => clusterMeals(yesterdayEntries, "UTC"), [yesterdayEntries]);
+
+  // Non-food entries grouped by type (exercise, sleep, symptom, mood, note)
   const groupByType = (src: LogEntry[]) => {
     const desc = [...src].sort((a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime());
     return GROUP_ORDER.reduce<Record<string, LogEntry[]>>((acc, type) => {
@@ -646,9 +746,21 @@ export default function TodayClient({
           ) : (
             <div className="pb-6">
               {/* ── Today ── */}
-              {Object.keys(todayGrouped).length > 0 && (
+              {(todayMeals.length > 0 || Object.keys(todayGrouped).length > 0) && (
                 <>
                   <DateBanner label="Today" />
+
+                  {/* Meal clusters (food + drink) */}
+                  {todayMeals.map(meal => (
+                    <MealSection
+                      key={meal.id}
+                      meal={meal}
+                      onDelete={handleDelete}
+                      onEdit={handleEdit}
+                    />
+                  ))}
+
+                  {/* Non-food activity */}
                   {Object.entries(todayGrouped).map(([type, typeEntries]) => (
                     <div key={type}>
                       <SectionLabel label={GROUP_LABELS[type] ?? type} />
@@ -671,9 +783,19 @@ export default function TodayClient({
               )}
 
               {/* ── Yesterday ── */}
-              {Object.keys(yesterdayGrouped).length > 0 && (
+              {(yesterdayMeals.length > 0 || Object.keys(yesterdayGrouped).length > 0) && (
                 <>
                   <DateBanner label="Yesterday" />
+
+                  {yesterdayMeals.map(meal => (
+                    <MealSection
+                      key={meal.id}
+                      meal={meal}
+                      onDelete={handleDelete}
+                      onEdit={handleEdit}
+                    />
+                  ))}
+
                   {Object.entries(yesterdayGrouped).map(([type, typeEntries]) => (
                     <div key={type}>
                       <SectionLabel label={GROUP_LABELS[type] ?? type} />
@@ -695,8 +817,8 @@ export default function TodayClient({
                 </>
               )}
 
-              {/* Edge case: all entries are in the window but split logic left both empty */}
-              {Object.keys(todayGrouped).length === 0 && Object.keys(yesterdayGrouped).length === 0 && (
+              {todayMeals.length === 0 && Object.keys(todayGrouped).length === 0 &&
+               yesterdayMeals.length === 0 && Object.keys(yesterdayGrouped).length === 0 && (
                 <div className="flex flex-col items-center justify-center text-center px-6 py-12">
                   <p className="text-sm font-semibold text-gray-700 mb-1">Nothing logged yet</p>
                   <p className="text-xs text-gray-400">Head to Chat to start tracking.</p>
