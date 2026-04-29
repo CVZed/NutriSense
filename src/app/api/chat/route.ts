@@ -136,10 +136,27 @@ export async function POST(req: Request) {
   }
 
   // ── Today's log entries for context injection ─────────────────────────────
+  // Compute midnight in the USER's local timezone, not the server's (Vercel = UTC).
+  // Without this, a user at UTC-4 querying at 9 PM would get server midnight UTC,
+  // which is 8 PM local — missing everything logged before 8 PM that day.
+  function startOfLocalDay(tz: string): Date {
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, year: "numeric", month: "numeric", day: "numeric",
+      hour: "numeric", minute: "numeric", second: "numeric", hour12: false,
+    }).formatToParts(now);
+    const get = (type: string) => parseInt(parts.find(p => p.type === type)?.value ?? "0");
+    const y = get("year"), m = get("month") - 1, d = get("day");
+    const h = get("hour"), min = get("minute"), s = get("second");
+    // Offset = difference between local time treated as UTC and actual UTC
+    const offsetMs = Date.UTC(y, m, d, h, min, s) - now.getTime();
+    // Local midnight as UTC = local date's midnight (as UTC) minus the offset
+    return new Date(Date.UTC(y, m, d) - offsetMs);
+  }
+
   let todayEntries: Record<string, unknown>[] = [];
   if (!isOnboarding) {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = startOfLocalDay(resolvedTimezone);
     const { data: entries } = await adminSupabase
       .from("log_entries")
       .select("entry_type, logged_at, structured_data")

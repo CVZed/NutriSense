@@ -648,9 +648,10 @@ export default function TodayClient({
     return Math.max(c, ex, bmr, goals.calories, 400) * 1.15;
   }, [consumedPts, exercisePts, bmr, goals.calories]);
 
-  // Meal clusters (food + drink, time-proximity grouped)
-  const todayMeals     = useMemo(() => clusterMeals(todayEntries,     "UTC"), [todayEntries]);
-  const yesterdayMeals = useMemo(() => clusterMeals(yesterdayEntries, "UTC"), [yesterdayEntries]);
+  // Meal clusters (food + drink, time-proximity grouped) — use browser timezone
+  const userTz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  const todayMeals     = useMemo(() => clusterMeals(todayEntries,     userTz), [todayEntries,     userTz]);
+  const yesterdayMeals = useMemo(() => clusterMeals(yesterdayEntries, userTz), [yesterdayEntries, userTz]);
 
   // Non-food entries grouped by type (exercise, sleep, symptom, mood, note)
   const groupByType = (src: LogEntry[]) => {

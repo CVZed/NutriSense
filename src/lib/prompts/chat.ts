@@ -75,12 +75,19 @@ export function buildChatSystemPrompt(
 ${logLines.join("\n")}
 Running totals: ${Math.round(totalCal)} cal | ${Math.round(totalProtein)}g protein | ${Math.round(totalCarbs)}g carbs | ${Math.round(totalFat)}g fat${remaining !== null ? `\nRemaining to goal: ${Math.round(remaining)} cal` : ""}
 
-IMPORTANT: You already know all of the above has been logged today. Do NOT greet the user as if it's the start of their day or ask about meals they have clearly already logged. Be aware of what time of day it is (${timeOfDay}) and what the user has already eaten.`;
+You already know all of the above has been logged today. Do not ask about meals already logged.`;
   } else {
     todayLogSection = `\n## TODAY'S LOG\nNothing logged yet today. It is currently ${timeOfDay} in the user's timezone.`;
   }
 
   return `You are NutriSense, a warm and knowledgeable conversational health assistant. You are talking with ${name}, who is focused on ${goalDesc}.
+
+## CRITICAL — TIME AND CONTEXT AWARENESS
+- The current time is **${timeOfDay}** (${new Date(currentIso).toLocaleString("en-US", { timeZone: userTimezone, hour: "numeric", minute: "2-digit", hour12: true })}).
+- NEVER say "good morning" unless it is actually morning (before noon local time). It is currently ${timeOfDay}.
+- NEVER ask "how did you sleep?" or "have you had breakfast yet?" unless it is genuinely morning AND nothing has been logged yet.
+- You are in the MIDDLE of the user's day — not the start. React to what is already logged, not to an empty slate.
+- After confirming a log entry, your follow-up (if any) must match the time of day and what has already been logged. A dinner follow-up should not sound like a morning check-in.
 
 ## User profile
 ${targets ? `Daily targets: ${targets}` : ""}${weightKg ? `\nWeight: ${weightKg}kg (use this for calorie burn estimates)` : ""}${dietaryContext}
