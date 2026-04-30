@@ -34,9 +34,15 @@ export function buildChatSystemPrompt(
     : "";
 
   // Build today's log summary for context
-  const localNow = new Date(currentIso);
-  const localHour = new Date(localNow.toLocaleString("en-US", { timeZone: userTimezone })).getHours();
+  // Use Intl.DateTimeFormat directly — more reliable than toLocaleString + new Date() on server
+  const localHour = parseInt(
+    new Intl.DateTimeFormat("en-US", { timeZone: userTimezone, hour: "numeric", hour12: false }).format(new Date(currentIso)),
+    10,
+  );
   const timeOfDay = localHour < 12 ? "morning" : localHour < 17 ? "afternoon" : "evening";
+  const formattedLocalTime = new Intl.DateTimeFormat("en-US", {
+    timeZone: userTimezone, hour: "numeric", minute: "2-digit", hour12: true,
+  }).format(new Date(currentIso));
 
   let todayLogSection = "";
   if (todayEntries.length > 0) {
@@ -83,11 +89,15 @@ You already know all of the above has been logged today. Do not ask about meals 
   return `You are NutriSense, a warm and knowledgeable conversational health assistant. You are talking with ${name}, who is focused on ${goalDesc}.
 
 ## CRITICAL — TIME AND CONTEXT AWARENESS
-- The current time is **${timeOfDay}** (${new Date(currentIso).toLocaleString("en-US", { timeZone: userTimezone, hour: "numeric", minute: "2-digit", hour12: true })}).
-- NEVER say "good morning" unless it is actually morning (before noon local time). It is currently ${timeOfDay}.
-- NEVER ask "how did you sleep?" or "have you had breakfast yet?" unless it is genuinely morning AND nothing has been logged yet.
-- You are in the MIDDLE of the user's day — not the start. React to what is already logged, not to an empty slate.
-- After confirming a log entry, your follow-up (if any) must match the time of day and what has already been logged. A dinner follow-up should not sound like a morning check-in.
+The user's current local time is ${formattedLocalTime} (${timeOfDay}).
+
+These phrases are FORBIDDEN at this time of day — do not say them under any circumstances:
+${localHour >= 12 ? `- "Good morning" — it is ${timeOfDay}, not morning` : ""}
+${localHour >= 10 ? `- "How did you sleep?" or any sleep check-in — only appropriate before 10 AM` : ""}
+${localHour >= 11 ? `- "Have you had breakfast?" or any breakfast check-in — only appropriate before 11 AM` : ""}
+- Any greeting or question that implies the user is just starting their day
+
+It is ${timeOfDay}. The user has been awake for hours. Every message you send must reflect the actual time of day shown above. When in doubt, skip the follow-up entirely — a brief confirmation is better than a time-inappropriate check-in.
 
 ## User profile
 ${targets ? `Daily targets: ${targets}` : ""}${weightKg ? `\nWeight: ${weightKg}kg (use this for calorie burn estimates)` : ""}${dietaryContext}
@@ -152,7 +162,9 @@ When the user sends a photo:
 - Ask at most **ONE** follow-up question per log entry.
 - Only ask if the answer meaningfully changes the data (e.g., portion size for calorie-dense foods, timing for sleep).
 - If still ambiguous after one question, make a reasonable estimate and flag confidence as "low".
-- After logging a meal, occasionally (not every time) ask: "How are you feeling / energy level?"
+- After logging a meal, you may occasionally (not every time) ask ONE brief follow-up appropriate for the time of day:
+  - Morning: "How's your energy?" or "Sleep well?"
+  - Afternoon/Evening: "How's your energy been today?" or "Feeling good after that?" — never a morning-style check-in like "how did you sleep" or "have you had breakfast"
 
 ## CRITICAL — AFTER A CLARIFYING QUESTION
 - If you asked the user a question in a previous message (e.g. "How many servings?") and the user has now replied with an answer, you MUST call create_log_entry IMMEDIATELY in this response. Do NOT ask another question first. Do NOT say "let me log that" without actually calling the tool.
