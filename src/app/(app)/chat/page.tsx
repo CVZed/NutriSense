@@ -55,9 +55,20 @@ export default async function ChatPage() {
       }));
     }
 
-    // Nudge detection — check what's already been logged today
-    const todayMidnight = new Date();
-    todayMidnight.setHours(0, 0, 0, 0);
+    // Nudge detection — compute local midnight in user's timezone (profile timezone)
+    // setHours(0,0,0,0) on Vercel would give UTC midnight, wrong for non-UTC users
+    const nudgeTz = profile?.timezone && profile.timezone !== "UTC" ? profile.timezone : "UTC";
+    const nudgeDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: nudgeTz }).format(new Date());
+    const nudgeParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: nudgeTz, year: "numeric", month: "numeric", day: "numeric",
+      hour: "numeric", minute: "numeric", second: "numeric", hour12: false,
+    }).formatToParts(new Date());
+    const nudgeGet = (type: string) => parseInt(nudgeParts.find(p => p.type === type)?.value ?? "0");
+    const [ny, nm, nd, nh, nmin, ns] = [nudgeGet("year"), nudgeGet("month") - 1, nudgeGet("day"), nudgeGet("hour"), nudgeGet("minute"), nudgeGet("second")];
+    const nudgeLocalAsUTC = Date.UTC(ny, nm, nd, nh, nmin, ns);
+    const nudgeOffsetMs = nudgeLocalAsUTC - Date.now();
+    const todayMidnight = new Date(Date.UTC(ny, nm, nd) - nudgeOffsetMs);
+    void nudgeDateStr; // used implicitly via ny/nm/nd
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [{ data: lastEntry }, { data: todayEntries }] = await Promise.all([
@@ -89,7 +100,13 @@ export default async function ChatPage() {
     const hasSleepToday = todayEntries?.some(e => e.entry_type === "sleep") ?? false;
     const hasFoodToday = todayEntries?.some(e => e.entry_type === "food" || e.entry_type === "drink") ?? false;
     const name = profile?.name ? `, ${profile.name}` : "";
-    const hour = new Date().getHours();
+    // Use profile timezone so the nudge hour is correct for the user's local time,
+    // not the Vercel server's UTC. Without this, 9 PM EDT = 1 AM UTC → "Good morning".
+    const userTz = profile?.timezone && profile.timezone !== "UTC" ? profile.timezone : undefined;
+    const hour = parseInt(
+      new Intl.DateTimeFormat("en-US", { timeZone: userTz, hour: "numeric", hour12: false }).format(new Date()),
+      10,
+    );
 
     // Only nudge when there's been a real gap in the conversation
     if (hoursSinceLastMessage > 2) {

@@ -62,7 +62,7 @@ export default function ChatInput({
   const canSend = (input.trim().length > 0 || !!pendingImage) && !busy;
 
   return (
-    <div className="bg-white border-t border-gray-100 px-3 py-2 pb-safe flex-shrink-0">
+    <div className="bg-white border-t border-gray-100 px-3 pt-2 pb-4 flex-shrink-0">
       {/* Image preview strip */}
       {imagePreviewUrl && (
         <div className="mb-2 flex items-start gap-2">

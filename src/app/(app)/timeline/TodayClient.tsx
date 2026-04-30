@@ -677,7 +677,7 @@ export default function TodayClient({
     ));
 
   return (
-    <div className="h-[calc(100dvh-64px)] flex justify-center bg-gray-50">
+    <div className="h-full flex justify-center bg-gray-50">
       <div className="w-full md:max-w-2xl md:shadow-xl md:border-x md:border-gray-200 bg-gray-50 h-full flex flex-col">
 
         {/* Header */}
