@@ -142,7 +142,7 @@ export default function ChatInput({
             value={input}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            placeholder={pendingImage ? "Add a note (optional)…" : "Log food, exercise, sleep, mood…"}
+            placeholder={pendingImage ? "Add a note (optional)…" : "Log everything…"}
             rows={1}
             disabled={busy}
             className="flex-1 resize-none bg-transparent px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none max-h-[100px] overflow-y-auto leading-relaxed"
