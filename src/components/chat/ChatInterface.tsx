@@ -8,6 +8,7 @@ import TypingIndicator from "./TypingIndicator";
 import ChatInput from "./ChatInput";
 import LogEntryCard from "./LogEntryCard";
 import BarcodeScanner from "./BarcodeScanner";
+import { X } from "lucide-react";
 import type { Message } from "ai";
 import type { QuickLogButton } from "@/types/database";
 import type { BarcodeResult } from "@/app/api/barcode/route";
@@ -26,6 +27,14 @@ function fileToBase64(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+// ── Queue ─────────────────────────────────────────────────────────────────────
+interface QueueItem {
+  id: string;
+  text: string;
+  previewUrl?: string;   // object URL for display (revoked after send)
+  imageFile?: File;      // original File for upload when draining
 }
 
 interface ChatInterfaceProps {
@@ -54,6 +63,9 @@ export default function ChatInterface({
   // ── Barcode scanner state ─────────────────────────────────────────────────
   const [showScanner, setShowScanner] = useState(false);
   const [barcodeLoading, setBarcodeLoading] = useState(false);
+
+  // ── Message queue state ───────────────────────────────────────────────────
+  const [messageQueue, setMessageQueue] = useState<QueueItem[]>([]);
 
   function handleImageSelect(file: File | null) {
     if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
@@ -114,11 +126,118 @@ export default function ChatInterface({
     else if (hour >= 15 && hour < 18) { mealLabel = "🍎 Suggest a snack";   mealMsg = "What should I snack on? Ask me what I have available, then suggest 2–3 options that fit my remaining macros for today."; }
     else if (hour >= 18 && hour < 21) { mealLabel = "🌙 Suggest dinner";    mealMsg = "What should I make for dinner? Ask me what I have available, then suggest 2–3 options that fit my remaining macros for today."; }
     return [
-      { label: mealLabel,            message: mealMsg },
-      { label: "💧 Log water",        message: "I just had a glass of water." },
-      { label: "📊 Daily check-in",   message: "How am I tracking today? Give me a quick overview of my calories and macros." },
+      { label: mealLabel,           message: mealMsg },
+      { label: "💧 Log water",       message: "I just had a glass of water." },
+      { label: "📊 Daily check-in",  message: "How am I tracking today? Give me a quick overview of my calories and macros." },
     ];
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Shared image upload helper ────────────────────────────────────────────
+  const uploadImage = useCallback(async (file: File): Promise<{ imageBase64: string | null; imageUrl: string | null; imageMimeType: string }> => {
+    const imageMimeType = file.type || "image/jpeg";
+    let imageBase64: string | null = null;
+    let imageUrl: string | null = null;
+
+    try { imageBase64 = await fileToBase64(file); } catch { /* ignore */ }
+
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const ext = file.name.split(".").pop() ?? "jpg";
+        const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("meal-photos")
+          .upload(path, file, { contentType: file.type, upsert: false });
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from("meal-photos").getPublicUrl(path);
+          imageUrl = urlData.publicUrl;
+        }
+      }
+    } catch { /* ignore */ }
+
+    return { imageBase64, imageUrl, imageMimeType };
+  }, []);
+
+  // ── Queue: add current input + image to queue ─────────────────────────────
+  const handleQueueMessage = useCallback(() => {
+    if (!input.trim() && !pendingImage) return;
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(10);
+
+    const item: QueueItem = {
+      id: crypto.randomUUID(),
+      text: input.trim(),
+      previewUrl: imagePreviewUrl ?? undefined,
+      imageFile: pendingImage ?? undefined,
+    };
+
+    setMessageQueue(prev => [...prev, item]);
+
+    // Clear input + image so the user can compose another message immediately
+    handleInputChange({ target: { value: "" } } as ChangeEvent<HTMLInputElement>);
+    setPendingImage(null);
+    setImagePreviewUrl(null);
+    // Don't revoke previewUrl yet — we still show it in the queue bubble
+  }, [input, pendingImage, imagePreviewUrl, handleInputChange]);
+
+  // ── Queue: remove an item ─────────────────────────────────────────────────
+  const removeFromQueue = useCallback((id: string) => {
+    setMessageQueue(prev => {
+      const item = prev.find(i => i.id === id);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter(i => i.id !== id);
+    });
+  }, []);
+
+  // ── Queue: send one item ──────────────────────────────────────────────────
+  const sendQueuedItem = useCallback(async (item: QueueItem) => {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    if (item.imageFile) {
+      setIsUploading(true);
+      try {
+        const { imageBase64, imageUrl, imageMimeType } = await uploadImage(item.imageFile);
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+        void append(
+          { role: "user", content: item.text || "📷" },
+          { body: { sessionId, timezone: tz, imageUrl, imageBase64, imageMimeType } }
+        );
+      } finally {
+        setIsUploading(false);
+      }
+    } else {
+      void append(
+        { role: "user", content: item.text },
+        { body: { sessionId, timezone: tz } }
+      );
+    }
+  }, [append, sessionId, uploadImage]);
+
+  // ── Queue: auto-drain when AI finishes and input is empty ─────────────────
+  const prevLoadingRef = useRef(false);
+  const inputRef = useRef(input);
+  const messageQueueRef = useRef(messageQueue);
+  const sendQueuedItemRef = useRef(sendQueuedItem);
+  useEffect(() => { inputRef.current = input; }, [input]);
+  useEffect(() => { messageQueueRef.current = messageQueue; }, [messageQueue]);
+  useEffect(() => { sendQueuedItemRef.current = sendQueuedItem; }, [sendQueuedItem]);
+
+  useEffect(() => {
+    const wasLoading = prevLoadingRef.current;
+    prevLoadingRef.current = isLoading;
+
+    // Only drain when loading transitions false AND user hasn't typed a reply
+    if (wasLoading && !isLoading && messageQueueRef.current.length > 0 && !inputRef.current.trim()) {
+      const timer = setTimeout(() => {
+        const queue = messageQueueRef.current;
+        if (queue.length === 0) return;
+        const [next, ...rest] = queue;
+        setMessageQueue(rest);
+        void sendQueuedItemRef.current(next);
+      }, 450);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Barcode detected → look up nutrition → send to AI ────────────────────
   const handleBarcodeDetected = useCallback(async (barcode: string) => {
@@ -182,65 +301,27 @@ export default function ChatInterface({
 
       if (pendingImage) {
         setIsUploading(true);
-        let uploadedUrl: string | null = null;
-        let imageBase64: string | null = null;
-        const imageMimeType = pendingImage.type || "image/jpeg";
-
-        // Read file as base64 via FileReader — simple, reliable, no canvas needed.
-        // This is sent as a body field (we confirmed body fields reach the server).
         try {
-          imageBase64 = await fileToBase64(pendingImage!);
-        } catch {
-          // FileReader failed — server will fall back to fetching imageUrl
-        }
-
-        // Also upload to Supabase Storage for persistent thumbnail display
-        try {
-          const supabase = createClient();
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const ext = pendingImage.name.split(".").pop() ?? "jpg";
-            const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
-            const { error: uploadError } = await supabase.storage
-              .from("meal-photos")
-              .upload(path, pendingImage, { contentType: pendingImage.type, upsert: false });
-
-            if (!uploadError) {
-              const { data: urlData } = supabase.storage
-                .from("meal-photos")
-                .getPublicUrl(path);
-              uploadedUrl = urlData.publicUrl;
-            }
-          }
-        } catch {
-          // Upload failed — image won't have a persistent thumbnail, but logging still works
+          const { imageBase64, imageUrl, imageMimeType } = await uploadImage(pendingImage);
+          if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+          setPendingImage(null);
+          setImagePreviewUrl(null);
+          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          void append(
+            { role: "user", content: input.trim() || "📷" },
+            { body: { sessionId, timezone: tz, imageUrl, imageBase64, imageMimeType } }
+          );
+          handleInputChange({ target: { value: "" } } as ChangeEvent<HTMLInputElement>);
         } finally {
           setIsUploading(false);
         }
-
-        // Clear preview state
-        if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
-        setPendingImage(null);
-        setImagePreviewUrl(null);
-
-        // Send imageBase64 as a plain body field — confirmed to reach the server
-        // (imageUrl already proves body fields work). imageUrl is also kept for
-        // thumbnail display in log entry cards.
-        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        void append(
-          { role: "user", content: input.trim() || "📷" },
-          { body: { sessionId, timezone: tz, imageUrl: uploadedUrl, imageBase64, imageMimeType } }
-        );
-
-        // Clear the text input manually (append doesn't do this automatically)
-        handleInputChange({ target: { value: "" } } as ChangeEvent<HTMLInputElement>);
         return;
       }
 
       // No image — normal submit
       handleSubmit(e);
     },
-    [input, pendingImage, imagePreviewUrl, handleSubmit, append, handleInputChange, sessionId]
+    [input, pendingImage, imagePreviewUrl, handleSubmit, append, handleInputChange, sessionId, uploadImage]
   );
 
   return (
@@ -252,8 +333,9 @@ export default function ChatInterface({
           onClose={() => setShowScanner(false)}
         />
       )}
+
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-4 py-3 pt-safe flex items-center gap-3">
+      <div className="bg-white border-b border-gray-100 px-4 py-3 pt-safe flex items-center gap-3 flex-shrink-0">
         <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center">
           <span className="text-white text-sm font-bold">N</span>
         </div>
@@ -296,9 +378,39 @@ export default function ChatInterface({
         <div ref={bottomRef} />
       </div>
 
+      {/* ── Queue bubbles ── */}
+      {messageQueue.length > 0 && (
+        <div className="bg-white border-t border-gray-100 px-3 pt-2 pb-1 space-y-1.5 flex-shrink-0">
+          <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-widest px-1">
+            Queued · {messageQueue.length}
+          </p>
+          {messageQueue.map((item) => (
+            <div key={item.id} className="flex items-center gap-2">
+              <div className="flex-1 flex items-center gap-2 bg-gray-100 rounded-2xl px-3 py-1.5 min-w-0">
+                {item.previewUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.previewUrl} alt="" className="w-7 h-7 rounded-lg object-cover flex-shrink-0" />
+                )}
+                <span className="text-sm text-gray-500 truncate">
+                  {item.text || (item.previewUrl ? "📷 Photo" : "")}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeFromQueue(item.id)}
+                className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
+                aria-label="Remove from queue"
+              >
+                <X className="w-3 h-3 text-gray-500" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Smart contextual chips — visible when input is empty */}
-      {onboardingComplete && !input.trim() && !isLoading && (
-        <div className="bg-white border-t border-gray-100 px-3 pt-2 pb-1 flex gap-2 overflow-x-auto no-scrollbar">
+      {onboardingComplete && !input.trim() && !isLoading && messageQueue.length === 0 && (
+        <div className="bg-white border-t border-gray-100 px-3 pt-2 pb-1 flex gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
           {smartChips.map((chip) => (
             <button
               key={chip.label}
@@ -321,7 +433,7 @@ export default function ChatInterface({
 
       {/* Quick-log buttons (user-configured) */}
       {onboardingComplete && quickLogButtons.filter(b => b.enabled).length > 0 && (
-        <div className="bg-white px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar">
+        <div className="bg-white px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
           {quickLogButtons.filter(b => b.enabled).map(btn => (
             <button
               key={btn.id}
@@ -353,6 +465,7 @@ export default function ChatInterface({
         onImageSelect={handleImageSelect}
         isUploading={isUploading}
         onBarcodeScan={() => setShowScanner(true)}
+        onQueue={handleQueueMessage}
       />
     </div>
   );

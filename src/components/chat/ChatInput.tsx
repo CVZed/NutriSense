@@ -15,6 +15,7 @@ interface ChatInputProps {
   onImageSelect: (file: File | null) => void;
   isUploading?: boolean;
   onBarcodeScan?: () => void;
+  onQueue?: () => void;
 }
 
 export default function ChatInput({
@@ -27,6 +28,7 @@ export default function ChatInput({
   onImageSelect,
   isUploading = false,
   onBarcodeScan,
+  onQueue,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -58,8 +60,11 @@ export default function ChatInput({
   }
 
   const busy = isLoading || isUploading;
-  // Allow send when there's text OR a pending image (and not busy)
-  const canSend = (input.trim().length > 0 || !!pendingImage) && !busy;
+  const hasContent = input.trim().length > 0 || !!pendingImage;
+  // Send requires content AND not busy
+  const canSend = hasContent && !busy;
+  // Queue works whenever there's content — even while AI is responding
+  const canQueue = hasContent;
 
   return (
     <div className="bg-white border-t border-gray-100 px-3 pt-2 pb-4 flex-shrink-0">
@@ -148,6 +153,24 @@ export default function ChatInput({
             className="flex-1 resize-none bg-transparent px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none max-h-[100px] overflow-y-auto leading-relaxed"
           />
         </div>
+
+        {/* Queue button — enabled even while AI is thinking */}
+        {onQueue && (
+          <button
+            type="button"
+            onClick={onQueue}
+            disabled={!canQueue}
+            className={cn(
+              "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all font-bold text-sm",
+              canQueue
+                ? "bg-gray-200 text-gray-600 hover:bg-gray-300 active:scale-95"
+                : "bg-gray-100 text-gray-300 cursor-not-allowed"
+            )}
+            aria-label="Add to queue"
+          >
+            Q
+          </button>
+        )}
 
         {/* Send button */}
         <button
