@@ -115,40 +115,39 @@ export default function ChatInput({
             onKeyDown={handleKeyDown}
             placeholder={pendingImage ? "Add a note (optional)…" : "Log everything…"}
             rows={1}
-            disabled={busy}
             className="flex-1 resize-none bg-transparent px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none max-h-[100px] overflow-y-auto leading-relaxed"
           />
         </div>
 
         {/* Row 2: Action buttons */}
         <div className="flex items-center gap-2">
-          {/* Camera */}
+          {/* Camera — always available so photos can be queued while AI thinks */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={busy}
+            disabled={isUploading}
             className={cn(
               "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors",
               pendingImage
                 ? "text-brand-500 bg-brand-50"
                 : "text-gray-400 hover:text-gray-600 hover:bg-gray-100",
-              busy && "opacity-40 cursor-not-allowed"
+              isUploading && "opacity-40 cursor-not-allowed"
             )}
             aria-label="Attach photo"
           >
             <Camera className="w-5 h-5" />
           </button>
 
-          {/* Barcode */}
+          {/* Barcode — always available so scans can be queued while AI thinks */}
           {onBarcodeScan && (
             <button
               type="button"
               onClick={onBarcodeScan}
-              disabled={busy}
+              disabled={isUploading}
               className={cn(
                 "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors",
                 "text-gray-400 hover:text-gray-600 hover:bg-gray-100",
-                busy && "opacity-40 cursor-not-allowed"
+                isUploading && "opacity-40 cursor-not-allowed"
               )}
               aria-label="Scan barcode"
             >
