@@ -95,8 +95,8 @@ export default function ChatInput({
         </div>
       )}
 
-      <form onSubmit={onSubmit} className="flex items-end gap-2">
-        {/* Hidden file input — camera on mobile, file picker on desktop */}
+      <form onSubmit={onSubmit} className="flex flex-col gap-2">
+        {/* Hidden file input */}
         <input
           ref={fileInputRef}
           type="file"
@@ -106,42 +106,8 @@ export default function ChatInput({
           onChange={handleFileChange}
         />
 
-        {/* Camera / attach button */}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={busy}
-          className={cn(
-            "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors",
-            pendingImage
-              ? "text-brand-500 bg-brand-50"
-              : "text-gray-400 hover:text-gray-600 hover:bg-gray-100",
-            busy && "opacity-40 cursor-not-allowed"
-          )}
-          aria-label="Attach photo"
-        >
-          <Camera className="w-5 h-5" />
-        </button>
-
-        {/* Barcode scan button */}
-        {onBarcodeScan && (
-          <button
-            type="button"
-            onClick={onBarcodeScan}
-            disabled={busy}
-            className={cn(
-              "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors",
-              "text-gray-400 hover:text-gray-600 hover:bg-gray-100",
-              busy && "opacity-40 cursor-not-allowed"
-            )}
-            aria-label="Scan barcode"
-          >
-            <ScanBarcode className="w-5 h-5" />
-          </button>
-        )}
-
-        {/* Text input */}
-        <div className="flex-1 relative bg-gray-100 rounded-2xl flex items-end">
+        {/* Row 1: Text area — full width */}
+        <div className="bg-gray-100 rounded-2xl flex items-end">
           <textarea
             ref={textareaRef}
             value={input}
@@ -154,38 +120,78 @@ export default function ChatInput({
           />
         </div>
 
-        {/* Queue button — enabled even while AI is thinking */}
-        {onQueue && (
+        {/* Row 2: Action buttons */}
+        <div className="flex items-center gap-2">
+          {/* Camera */}
           <button
             type="button"
-            onClick={onQueue}
-            disabled={!canQueue}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={busy}
             className={cn(
-              "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all font-bold text-sm",
-              canQueue
-                ? "bg-gray-200 text-gray-600 hover:bg-gray-300 active:scale-95"
-                : "bg-gray-100 text-gray-300 cursor-not-allowed"
+              "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors",
+              pendingImage
+                ? "text-brand-500 bg-brand-50"
+                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100",
+              busy && "opacity-40 cursor-not-allowed"
             )}
-            aria-label="Add to queue"
+            aria-label="Attach photo"
           >
-            Q
+            <Camera className="w-5 h-5" />
           </button>
-        )}
 
-        {/* Send button */}
-        <button
-          type="submit"
-          disabled={!canSend}
-          className={cn(
-            "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all",
-            canSend
-              ? "bg-brand-500 text-white shadow-sm hover:bg-brand-600 active:scale-95"
-              : "bg-gray-200 text-gray-400"
+          {/* Barcode */}
+          {onBarcodeScan && (
+            <button
+              type="button"
+              onClick={onBarcodeScan}
+              disabled={busy}
+              className={cn(
+                "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors",
+                "text-gray-400 hover:text-gray-600 hover:bg-gray-100",
+                busy && "opacity-40 cursor-not-allowed"
+              )}
+              aria-label="Scan barcode"
+            >
+              <ScanBarcode className="w-5 h-5" />
+            </button>
           )}
-          aria-label="Send message"
-        >
-          <Send className="w-4 h-4" />
-        </button>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Queue button */}
+          {onQueue && (
+            <button
+              type="button"
+              onClick={onQueue}
+              disabled={!canQueue}
+              className={cn(
+                "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all font-bold text-sm",
+                canQueue
+                  ? "bg-gray-200 text-gray-600 hover:bg-gray-300 active:scale-95"
+                  : "bg-gray-100 text-gray-300 cursor-not-allowed"
+              )}
+              aria-label="Add to queue"
+            >
+              Q
+            </button>
+          )}
+
+          {/* Send */}
+          <button
+            type="submit"
+            disabled={!canSend}
+            className={cn(
+              "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all",
+              canSend
+                ? "bg-brand-500 text-white shadow-sm hover:bg-brand-600 active:scale-95"
+                : "bg-gray-200 text-gray-400"
+            )}
+            aria-label="Send message"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
       </form>
     </div>
   );
