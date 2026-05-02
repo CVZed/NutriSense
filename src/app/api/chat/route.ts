@@ -178,10 +178,13 @@ export async function POST(req: Request) {
     execute: async (dataStream) => {
       const result = streamText({
         model: anthropic("claude-sonnet-4-6"),
-        system: systemPrompt,
+        // Pass system as a cacheable content block — Anthropic reuses it across
+        // messages in the same session (5-min TTL) at a 90% token discount.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        system: [{ type: "text", text: systemPrompt, experimental_providerMetadata: { anthropic: { cacheControl: { type: "ephemeral" } } } }] as any,
         messages: processedMessages,
-        maxTokens: 1024,
-        maxSteps: 6,
+        maxTokens: 512,
+        maxSteps: 4,
 
         tools: isOnboarding
           ? {

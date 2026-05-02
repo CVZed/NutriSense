@@ -49,7 +49,6 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
 
   const [days, setDays] = useState<DayRange>(30);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const analysisStarted = useRef(false);
 
   // ── AI chat ────────────────────────────────────────────────────────────────
   const { messages, setMessages, input, handleInputChange, handleSubmit, append, isLoading } = useChat({
@@ -70,14 +69,7 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [append, setMessages, tz]);
 
-  // Auto-trigger analysis on first load
-  useEffect(() => {
-    if (!analysisStarted.current) {
-      analysisStarted.current = true;
-      triggerAnalysis(days);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Analysis is triggered manually — no auto-fire on page load
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -298,7 +290,11 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
                 <button
                   key={d}
                   disabled={isLoading}
-                  onClick={() => { setDays(d); triggerAnalysis(d); }}
+                  onClick={() => {
+                    setDays(d);
+                    // Only re-run analysis if one has already been triggered
+                    if (visibleMessages.length > 0) triggerAnalysis(d);
+                  }}
                   className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
                     days === d
                       ? "bg-brand-500 text-white"
@@ -313,8 +309,24 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
 
           {/* Messages */}
           <div className="px-4 py-3 space-y-3 min-h-[120px]">
+            {/* Not yet triggered — show prompt button */}
+            {visibleMessages.length === 0 && !isLoading && (
+              <div className="flex flex-col items-center justify-center py-6 gap-3">
+                <p className="text-xs text-gray-400 text-center leading-relaxed">
+                  AI analysis looks for patterns across your full history — food, sleep, exercise, mood, and symptoms.
+                </p>
+                <button
+                  onClick={() => triggerAnalysis(days)}
+                  className="bg-brand-500 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-brand-600 active:scale-95 transition-all"
+                >
+                  Analyze my last {days} days
+                </button>
+              </div>
+            )}
+
+            {/* Loading spinner */}
             {visibleMessages.length === 0 && isLoading && (
-              <div className="flex items-center gap-2 text-gray-400">
+              <div className="flex items-center gap-2 text-gray-400 py-4">
                 <div className="flex gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce [animation-delay:0ms]" />
                   <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce [animation-delay:150ms]" />
