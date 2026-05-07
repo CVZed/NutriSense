@@ -177,6 +177,10 @@ export async function POST(req: Request) {
 
   // ── Stream response ───────────────────────────────────────────────────────
   return createDataStreamResponse({
+    onError: (error) => {
+      console.error("[chat] Anthropic error:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      return String(error);
+    },
     execute: async (dataStream) => {
       const result = streamText({
         model: anthropic("claude-4-sonnet-20250514"),
