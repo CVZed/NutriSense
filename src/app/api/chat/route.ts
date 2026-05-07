@@ -32,9 +32,11 @@ type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
+  console.log("[chat] POST invoked at", new Date().toISOString());
   // ── Auth ──────────────────────────────────────────────────────────────────
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  console.log("[chat] auth user:", user?.id ?? "none");
   if (!user) return new Response("Unauthorized", { status: 401 });
 
   // ── Profile ───────────────────────────────────────────────────────────────
