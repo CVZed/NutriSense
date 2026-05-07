@@ -40,6 +40,32 @@ function fmtSleep(min: number): string {
 const DAY_OPTIONS = [7, 30, 60, 90] as const;
 type DayRange = typeof DAY_OPTIONS[number];
 
+// ── Confidence badge ──────────────────────────────────────────────────────────
+function ConfidenceBadge({ level }: { level: "low" | "medium" | "high" }) {
+  const styles = {
+    high:   "bg-green-100 text-green-700",
+    medium: "bg-amber-100 text-amber-700",
+    low:    "bg-gray-100 text-gray-500",
+  };
+  const labels = { high: "Strong signal", medium: "Likely", low: "Weak signal" };
+  return (
+    <span className={`flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${styles[level]}`}>
+      {labels[level]}
+    </span>
+  );
+}
+
+// ── Dots loading indicator ────────────────────────────────────────────────────
+function DotsLoader() {
+  return (
+    <div className="flex gap-1 py-2">
+      <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce [animation-delay:0ms]" />
+      <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce [animation-delay:150ms]" />
+      <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce [animation-delay:300ms]" />
+    </div>
+  );
+}
+
 export default function InsightsClient({ entries, profile, timezone }: Props) {
   const tz = timezone || "UTC";
   const calorieGoal  = profile?.calorie_goal    ?? 2000;
@@ -50,11 +76,71 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
   const [days, setDays] = useState<DayRange>(30);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // ── AI chat ────────────────────────────────────────────────────────────────
+  // ── Main AI analysis chat ──────────────────────────────────────────────────
   const { messages, setMessages, input, handleInputChange, handleSubmit, append, isLoading } = useChat({
     api: "/api/insights-chat",
     body: { timezone: tz, days },
   });
+
+  // ── Quick Trends state ─────────────────────────────────────────────────────
+  const [trendStatus, setTrendStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [quickTrend, setQuickTrend] = useState<{ text: string; confidence: "low" | "medium" | "high" } | null>(null);
+  const [seenTrends, setSeenTrends] = useState<string[]>([]);
+  const [trendExpanded, setTrendExpanded] = useState(false);
+
+  // Separate useChat for the trend deep-dive + follow-up conversation
+  const {
+    messages: trendMessages,
+    setMessages: setTrendMessages,
+    input: trendInput,
+    handleInputChange: handleTrendInputChange,
+    handleSubmit: handleTrendSubmit,
+    append: appendTrend,
+    isLoading: trendChatLoading,
+  } = useChat({
+    api: "/api/insights-chat",
+    body: { timezone: tz, days },
+  });
+
+  const fetchTrend = useCallback(async (exclude: string[]) => {
+    setTrendStatus("loading");
+    setTrendExpanded(false);
+    setTrendMessages([]);
+    try {
+      const res = await fetch("/api/quick-trend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timezone: tz, days, excludeTrends: exclude }),
+      });
+      const data = await res.json() as { found: boolean; trend?: string; confidence?: "low" | "medium" | "high"; reason?: string };
+      if (data.found && data.trend && data.confidence) {
+        setQuickTrend({ text: data.trend, confidence: data.confidence });
+        setSeenTrends(prev => [...prev, data.trend!]);
+        setTrendStatus("idle");
+      } else {
+        setTrendStatus("error");
+      }
+    } catch {
+      setTrendStatus("error");
+    }
+  }, [tz, days, setTrendMessages]);
+
+  const handleTrendInteresting = useCallback(() => {
+    if (!quickTrend) return;
+    setTrendExpanded(true);
+    setTrendMessages([]);
+    void appendTrend(
+      {
+        role: "user",
+        content: `I want to explore this pattern more deeply: "${quickTrend.text}". What data in my log supports this? What might it mean for my health, and is there anything actionable I can do?`,
+      },
+      { body: { timezone: tz, days } }
+    );
+  }, [quickTrend, setTrendMessages, appendTrend, tz, days]);
+
+  const handleTrendDontThinkSo = useCallback(() => {
+    void fetchTrend(seenTrends);
+  }, [fetchTrend, seenTrends]);
 
   // Trigger (or re-trigger) AI analysis for a given day range
   const triggerAnalysis = useCallback((d: DayRange) => {
@@ -273,6 +359,132 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
                 <p className="text-lg font-bold text-gray-900">{fmtSleep(stats.avgSleepMin)}</p>
                 <p className="text-xs text-gray-400">avg per night this week</p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Quick Trends ── */}
+        {hasAnyData && (
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="px-4 pt-4 pb-3 border-b border-gray-50">
+              <p className="text-sm font-semibold text-gray-900">✨ Quick Trend</p>
+              <p className="text-xs text-gray-400">A pattern AI noticed in your data</p>
+            </div>
+
+            <div className="px-4 py-4">
+              {/* Idle — no trend fetched yet */}
+              {!quickTrend && trendStatus === "idle" && (
+                <div className="flex flex-col items-center py-3 gap-3">
+                  <p className="text-xs text-gray-400 text-center leading-relaxed">
+                    Tap to see a specific pattern AI spotted across your logs.
+                  </p>
+                  <button
+                    onClick={() => fetchTrend(seenTrends)}
+                    className="bg-brand-500 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-brand-600 active:scale-95 transition-all"
+                  >
+                    Discover a trend
+                  </button>
+                </div>
+              )}
+
+              {/* Loading */}
+              {trendStatus === "loading" && (
+                <div className="flex items-center gap-2 text-gray-400">
+                  <DotsLoader />
+                  <span className="text-xs">Looking for patterns…</span>
+                </div>
+              )}
+
+              {/* Not enough data */}
+              {trendStatus === "error" && (
+                <p className="text-xs text-gray-400 text-center py-2">
+                  Not enough data yet to spot a reliable trend — keep logging!
+                </p>
+              )}
+
+              {/* Trend card */}
+              {quickTrend && trendStatus === "idle" && (
+                <div className="space-y-3">
+                  {/* Trend sentence + confidence */}
+                  <div className="flex items-start gap-2">
+                    <p className="text-sm text-gray-800 flex-1 leading-snug">{quickTrend.text}</p>
+                    <ConfidenceBadge level={quickTrend.confidence} />
+                  </div>
+
+                  {/* Action buttons — hidden once expanded */}
+                  {!trendExpanded && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleTrendInteresting}
+                        disabled={trendChatLoading}
+                        className="flex-1 py-2 bg-brand-50 text-brand-600 rounded-xl text-xs font-semibold border border-brand-100 hover:bg-brand-100 active:scale-95 transition-all disabled:opacity-50"
+                      >
+                        Interesting →
+                      </button>
+                      <button
+                        onClick={handleTrendDontThinkSo}
+                        className="flex-1 py-2 bg-gray-50 text-gray-500 rounded-xl text-xs font-semibold border border-gray-100 hover:bg-gray-100 active:scale-95 transition-all"
+                      >
+                        I don&apos;t think so
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Expanded deep-dive */}
+                  {trendExpanded && (
+                    <div className="space-y-3 pt-1 border-t border-gray-50">
+                      {/* Streaming analysis */}
+                      {trendChatLoading && trendMessages.filter(m => m.role === "assistant").length === 0 && (
+                        <DotsLoader />
+                      )}
+                      {trendMessages
+                        .filter((m, i) => !(i === 0 && m.role === "user")) // hide trigger msg
+                        .map((m) => (
+                          <div key={m.id}>
+                            {m.role === "assistant" ? (
+                              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                            ) : (
+                              <div className="flex justify-end">
+                                <div className="bg-brand-500 text-white text-sm rounded-2xl rounded-tr-sm px-3 py-2 max-w-[85%]">
+                                  {m.content}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      {trendChatLoading && trendMessages.filter(m => m.role === "assistant").length > 0 && (
+                        <DotsLoader />
+                      )}
+
+                      {/* Follow-up input */}
+                      <form onSubmit={handleTrendSubmit} className="flex gap-2">
+                        <input
+                          value={trendInput}
+                          onChange={handleTrendInputChange}
+                          placeholder="Ask a follow-up…"
+                          disabled={trendChatLoading}
+                          className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:border-brand-400 disabled:opacity-50"
+                        />
+                        <button
+                          type="submit"
+                          disabled={trendChatLoading || !trendInput.trim()}
+                          className="bg-brand-500 text-white rounded-xl px-3 py-2 text-sm font-medium disabled:opacity-40"
+                        >
+                          Send
+                        </button>
+                      </form>
+
+                      {/* Try a different trend */}
+                      <button
+                        onClick={handleTrendDontThinkSo}
+                        className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        ← Try a different trend
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

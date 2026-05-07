@@ -42,8 +42,16 @@ export default function ProfileForm({ profile, saveProfile, signOut }: ProfileFo
 
   // Auto-detect browser timezone as a fallback suggestion
   const [detectedTz, setDetectedTz] = useState("");
+  const [allTimezones, setAllTimezones] = useState<string[]>([]);
   useEffect(() => {
-    setDetectedTz(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    setDetectedTz(detected);
+    // Build the full IANA timezone list for the datalist
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const zones = (Intl as any).supportedValuesOf?.("timeZone") as string[] | undefined;
+      if (zones?.length) setAllTimezones(zones);
+    } catch { /* browser doesn't support it — text input still works */ }
   }, []);
 
   const aiMacros = profile?.ai_recommended_macros as {
@@ -226,14 +234,23 @@ export default function ProfileForm({ profile, saveProfile, signOut }: ProfileFo
             </h2>
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
               <FormRow label="Timezone">
-                <div className="flex items-center gap-2 justify-end">
+                <div className="flex flex-col items-end gap-1">
                   <input
                     name="timezone"
                     type="text"
-                      defaultValue={profile?.timezone ?? detectedTz}
+                    list="tz-list"
+                    defaultValue={profile?.timezone ?? detectedTz}
                     placeholder={detectedTz || "America/Chicago"}
-                    className="form-input text-right w-44"
+                    className="form-input text-right w-52"
                   />
+                  {allTimezones.length > 0 && (
+                    <datalist id="tz-list">
+                      {allTimezones.map(tz => (
+                        <option key={tz} value={tz} />
+                      ))}
+                    </datalist>
+                  )}
+                  <p className="text-[10px] text-gray-400">Type to search (e.g. &quot;New York&quot;)</p>
                 </div>
               </FormRow>
               <FormRow label="Data retention">
