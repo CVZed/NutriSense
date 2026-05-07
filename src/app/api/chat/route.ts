@@ -183,7 +183,7 @@ export async function POST(req: Request) {
     },
     execute: async (dataStream) => {
       const result = streamText({
-        model: anthropic("claude-4-sonnet-20250514"),
+        model: anthropic("claude-3-5-sonnet-20241022"),
         system: systemPrompt,
         messages: processedMessages,
         maxTokens: 512,
@@ -407,6 +407,11 @@ export async function POST(req: Request) {
             });
           }
         },
+      });
+
+      // Catch the actual Anthropic error for logging (doesn't consume the stream)
+      result.text.catch((err: unknown) => {
+        console.error("[chat] streamText error:", JSON.stringify(err, Object.getOwnPropertyNames(err as object)));
       });
 
       result.mergeIntoDataStream(dataStream);
