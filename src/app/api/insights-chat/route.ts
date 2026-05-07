@@ -208,7 +208,8 @@ export async function POST(req: Request) {
   const systemPrompt = buildInsightsSystemPrompt(profile as unknown as Profile, eventLog, days);
 
   const result = streamText({
-    model: anthropic("claude-3-5-sonnet-latest"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    model: anthropic("claude-sonnet-4-5") as any,
     system: systemPrompt,
     messages,
     maxTokens: 1024, // Keep higher for insights — analysis responses are longer
