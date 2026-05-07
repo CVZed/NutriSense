@@ -181,8 +181,7 @@ export async function POST(req: Request) {
     },
     execute: async (dataStream) => {
       const result = streamText({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        model: anthropic("claude-sonnet-4-5") as any,
+        model: anthropic("claude-sonnet-4-5" as string),
         system: systemPrompt,
         messages: processedMessages,
         maxTokens: 512,

@@ -126,8 +126,7 @@ export async function POST(req: Request) {
 
   const { object } = await generateObject({
     // Haiku is sufficient for structured extraction — no tool calls, one-sentence output.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    model: anthropic("claude-haiku-4-5") as any,
+    model: anthropic("claude-haiku-4-5" as string),
     schema: z.object({
       found: z.boolean().describe("True if a genuine pattern exists in the data"),
       trend: z.string().describe("One sentence (under 25 words) describing a specific, data-backed health pattern. Name actual foods, symptoms, times, or numbers. No general advice."),
