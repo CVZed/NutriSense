@@ -24,7 +24,9 @@
       "Bash(brew install *)",
       "Bash(export PATH=\"/opt/homebrew/bin:$PATH\")",
       "Bash(gh --version)",
-      "Bash(gh auth *)"
+      "Bash(gh auth *)",
+      "Bash(xargs ls *)",
+      "Bash(xargs cat *)"
     ]
   }
 }

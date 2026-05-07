@@ -177,7 +177,7 @@ export async function POST(req: Request) {
   return createDataStreamResponse({
     execute: async (dataStream) => {
       const result = streamText({
-        model: anthropic("claude-sonnet-4-6"),
+        model: anthropic("claude-4-sonnet-20250514"),
         // Pass system as a cacheable content block — Anthropic reuses it across
         // messages in the same session (5-min TTL) at a 90% token discount.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
