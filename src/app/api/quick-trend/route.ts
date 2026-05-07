@@ -125,7 +125,7 @@ export async function POST(req: Request) {
     : "";
 
   const { object } = await generateObject({
-    model: anthropic("claude-3-5-sonnet-20241022"),
+    model: anthropic("claude-3-5-sonnet-latest"),
     schema: z.object({
       found: z.boolean().describe("True if a genuine pattern exists in the data"),
       trend: z.string().describe("One sentence (under 25 words) describing a specific, data-backed health pattern. Name actual foods, symptoms, times, or numbers. No general advice."),

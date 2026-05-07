@@ -183,7 +183,7 @@ export async function POST(req: Request) {
     },
     execute: async (dataStream) => {
       const result = streamText({
-        model: anthropic("claude-3-5-sonnet-20241022"),
+        model: anthropic("claude-3-5-sonnet-latest"),
         system: systemPrompt,
         messages: processedMessages,
         maxTokens: 512,
