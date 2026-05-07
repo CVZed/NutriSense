@@ -209,9 +209,7 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model: anthropic("claude-4-sonnet-20250514"),
-    // Cache the system prompt (contains the full event log — can be very large)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    system: [{ type: "text", text: systemPrompt, experimental_providerMetadata: { anthropic: { cacheControl: { type: "ephemeral" } } } }] as any,
+    system: systemPrompt,
     messages,
     maxTokens: 1024, // Keep higher for insights — analysis responses are longer
   });
