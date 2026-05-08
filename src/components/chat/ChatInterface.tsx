@@ -42,6 +42,7 @@ interface ChatInterfaceProps {
   onboardingComplete: boolean;
   onOnboardingComplete?: () => void;
   quickLogButtons?: QuickLogButton[];
+  initialInput?: string;
 }
 
 export default function ChatInterface({
@@ -49,6 +50,7 @@ export default function ChatInterface({
   onboardingComplete,
   onOnboardingComplete,
   quickLogButtons = [],
+  initialInput,
 }: ChatInterfaceProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasNotifiedCompletion = useRef(false);
@@ -81,6 +83,7 @@ export default function ChatInterface({
     useChat({
       api: "/api/chat",
       initialMessages,
+      initialInput: initialInput ?? "",
       body: { sessionId, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       onFinish: (message) => {
         if (

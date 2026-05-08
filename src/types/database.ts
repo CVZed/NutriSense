@@ -128,6 +128,46 @@ export type StructuredData =
   | MoodData
   | NoteData;
 
+// ─── Plan feature types (migration 003) ──────────────────────────────────────
+
+export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack" | "workout";
+
+export interface SavedMealItem {
+  entry_type: "food" | "drink";
+  structured_data: FoodData;
+}
+
+export interface SavedMeal {
+  id: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+  name: string;
+  emoji: string;
+  items: SavedMealItem[];
+  total_calories: number;
+  total_protein_g: number;
+  total_carbs_g: number;
+  total_fat_g: number;
+  meal_type_hint: MealSlot | null;
+}
+
+export interface PlanItem {
+  id: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+  plan_date: string;           // 'YYYY-MM-DD' in user's local timezone
+  meal_slot: MealSlot;
+  saved_meal_id: string | null;
+  title: string;
+  description: string | null;
+  is_done: boolean;
+  done_at: string | null;
+  display_order: number;
+  saved_meal?: SavedMeal | null; // joined in query, not a DB column
+}
+
 // ─── Database row types ───────────────────────────────────────────────────────
 // Structure must match @supabase/supabase-js GenericSchema:
 //   Tables → each needs Row, Insert, Update, Relationships
@@ -312,6 +352,83 @@ export interface Database {
           confidence_level?: InsightConfidence;
           data_window_start?: string;
           data_window_end?: string;
+        };
+        Relationships: [];
+      };
+      saved_meals: {
+        Row: {
+          id: string;
+          user_id: string;
+          created_at: string;
+          updated_at: string;
+          name: string;
+          emoji: string;
+          items: Json; // SavedMealItem[]
+          total_calories: number;
+          total_protein_g: number;
+          total_carbs_g: number;
+          total_fat_g: number;
+          meal_type_hint: MealSlot | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          emoji?: string;
+          items?: Json;
+          total_calories?: number;
+          total_protein_g?: number;
+          total_carbs_g?: number;
+          total_fat_g?: number;
+          meal_type_hint?: MealSlot | null;
+        };
+        Update: {
+          name?: string;
+          emoji?: string;
+          items?: Json;
+          total_calories?: number;
+          total_protein_g?: number;
+          total_carbs_g?: number;
+          total_fat_g?: number;
+          meal_type_hint?: MealSlot | null;
+        };
+        Relationships: [];
+      };
+      plan_items: {
+        Row: {
+          id: string;
+          user_id: string;
+          created_at: string;
+          updated_at: string;
+          plan_date: string;
+          meal_slot: MealSlot;
+          saved_meal_id: string | null;
+          title: string;
+          description: string | null;
+          is_done: boolean;
+          done_at: string | null;
+          display_order: number;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          plan_date: string;
+          meal_slot: MealSlot;
+          saved_meal_id?: string | null;
+          title: string;
+          description?: string | null;
+          is_done?: boolean;
+          done_at?: string | null;
+          display_order?: number;
+        };
+        Update: {
+          meal_slot?: MealSlot;
+          saved_meal_id?: string | null;
+          title?: string;
+          description?: string | null;
+          is_done?: boolean;
+          done_at?: string | null;
+          display_order?: number;
         };
         Relationships: [];
       };

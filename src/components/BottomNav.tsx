@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageSquare, CalendarDays, Lightbulb, User } from "lucide-react";
+import { MessageSquare, CalendarDays, Lightbulb, ClipboardList, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
@@ -20,6 +20,11 @@ const tabs = [
     href: "/insights",
     label: "Insights",
     icon: Lightbulb,
+  },
+  {
+    href: "/plan",
+    label: "Plan",
+    icon: ClipboardList,
   },
   {
     href: "/profile",

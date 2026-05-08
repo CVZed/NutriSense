@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import LogEntryCard from "@/components/chat/LogEntryCard";
-import type { Database } from "@/types/database";
+import type { Database, SavedMealItem } from "@/types/database";
 
 type LogEntry = Database["public"]["Tables"]["log_entries"]["Row"];
 
@@ -431,10 +431,16 @@ function MealSection({
   meal,
   onDelete,
   onEdit,
+  selectMode,
+  selectedIds,
+  onSelect,
 }: {
   meal: MealCluster;
   onDelete: (id: string) => void;
   onEdit: (id: string, updated: Record<string, unknown>, newLoggedAt?: string) => void;
+  selectMode?: boolean;
+  selectedIds?: Set<string>;
+  onSelect?: (id: string) => void;
 }) {
   const timeStr = new Date(meal.startTime).toLocaleTimeString("en-US", {
     hour: "numeric", minute: "2-digit", hour12: true,
@@ -469,9 +475,102 @@ function MealSection({
             loggedAt={entry.logged_at}
             onDelete={() => onDelete(entry.id)}
             onEdit={(updated, newLoggedAt) => onEdit(entry.id, updated, newLoggedAt)}
-            swipeable
+            swipeable={!selectMode}
+            selectable={selectMode}
+            selected={selectedIds?.has(entry.id) ?? false}
+            onSelect={() => onSelect?.(entry.id)}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Save Meal Modal ───────────────────────────────────────────────────────────
+const MEAL_EMOJIS = ["🍳","🥗","🍔","🌮","🍜","🍕","🥙","🍱","🥩","🐟","🥘","🍛","🫕","🥪","🍝","🍣","🫔","🥚","🥦","🥑"];
+
+function SaveMealModal({
+  entries,
+  onClose,
+  onSaved,
+}: {
+  entries: LogEntry[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [emoji, setEmoji] = useState("🍽️");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    if (!name.trim()) { setError("Please give this meal a name."); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const items: SavedMealItem[] = entries.map(e => ({
+        entry_type: e.entry_type as "food" | "drink",
+        structured_data: e.structured_data as unknown as SavedMealItem["structured_data"],
+      }));
+      const res = await fetch("/api/saved-meals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), emoji, items }),
+      });
+      if (!res.ok) { setError("Failed to save meal. Please try again."); return; }
+      onSaved();
+    } catch {
+      setError("Something went wrong.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full md:max-w-2xl bg-white rounded-t-2xl p-5 pb-8 shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-900">Save as Meal</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+
+        {/* Emoji picker */}
+        <p className="text-xs text-gray-500 mb-2">Choose an emoji</p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {MEAL_EMOJIS.map(e => (
+            <button
+              key={e}
+              onClick={() => setEmoji(e)}
+              className={`w-9 h-9 rounded-lg text-xl flex items-center justify-center transition-colors ${emoji === e ? "bg-brand-50 ring-2 ring-brand-500" : "bg-gray-100 hover:bg-gray-200"}`}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+
+        {/* Meal name */}
+        <p className="text-xs text-gray-500 mb-1">Meal name</p>
+        <input
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="e.g. Chicken & Rice"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 mb-1"
+          maxLength={60}
+          onKeyDown={e => e.key === "Enter" && handleSave()}
+          autoFocus
+        />
+        {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
+
+        <p className="text-xs text-gray-400 mb-4">{entries.length} item{entries.length !== 1 ? "s" : ""} will be saved</p>
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full bg-brand-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm"
+        >
+          {saving ? "Saving…" : "Save Meal"}
+        </button>
       </div>
     </div>
   );
@@ -483,6 +582,32 @@ export default function TodayClient({
 }: Props) {
   const router = useRouter();
   const [entries, setEntries] = useState(initialEntries);
+
+  // Multi-select mode
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showSaveMealModal, setShowSaveMealModal] = useState(false);
+
+  function toggleSelectMode() {
+    setSelectMode(m => !m);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  const selectedEntries = entries.filter(
+    e => selectedIds.has(e.id) && (e.entry_type === "food" || e.entry_type === "drink")
+  );
 
   // Refresh server data every time this tab is visited
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -681,9 +806,17 @@ export default function TodayClient({
       <div className="w-full md:max-w-2xl md:shadow-xl md:border-x md:border-gray-200 bg-gray-50 h-full flex flex-col">
 
         {/* Header */}
-        <div className="bg-white border-b border-gray-100 px-4 py-3 flex-shrink-0">
-          <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Last 24 Hours</p>
-          <p className="text-base font-semibold text-gray-900">{todayLabel}</p>
+        <div className="bg-white border-b border-gray-100 px-4 py-3 flex-shrink-0 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Last 24 Hours</p>
+            <p className="text-base font-semibold text-gray-900">{todayLabel}</p>
+          </div>
+          <button
+            onClick={toggleSelectMode}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${selectMode ? "bg-gray-100 text-gray-700" : "text-brand-600 hover:bg-brand-50"}`}
+          >
+            {selectMode ? "Cancel" : "Select"}
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -758,6 +891,9 @@ export default function TodayClient({
                       meal={meal}
                       onDelete={handleDelete}
                       onEdit={handleEdit}
+                      selectMode={selectMode}
+                      selectedIds={selectedIds}
+                      onSelect={toggleSelect}
                     />
                   ))}
 
@@ -794,6 +930,9 @@ export default function TodayClient({
                       meal={meal}
                       onDelete={handleDelete}
                       onEdit={handleEdit}
+                      selectMode={selectMode}
+                      selectedIds={selectedIds}
+                      onSelect={toggleSelect}
                     />
                   ))}
 
@@ -828,6 +967,35 @@ export default function TodayClient({
             </div>
           )}
         </div>
+
+        {/* Floating action bar — appears when food/drink items are selected */}
+        {selectMode && selectedIds.size > 0 && (
+          <div className="fixed bottom-16 left-0 right-0 flex justify-center pointer-events-none z-40">
+            <div className="pointer-events-auto w-full md:max-w-2xl px-4">
+              <button
+                onClick={() => setShowSaveMealModal(true)}
+                className="w-full bg-brand-500 text-white font-semibold py-3.5 rounded-2xl shadow-lg text-sm flex items-center justify-center gap-2"
+              >
+                <span>🍽️</span>
+                <span>Save as Meal ({selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Save Meal Modal */}
+        {showSaveMealModal && (
+          <SaveMealModal
+            entries={selectedEntries}
+            onClose={() => setShowSaveMealModal(false)}
+            onSaved={() => {
+              setShowSaveMealModal(false);
+              setSelectMode(false);
+              setSelectedIds(new Set());
+              router.refresh();
+            }}
+          />
+        )}
       </div>
     </div>
   );

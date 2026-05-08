@@ -10,12 +10,14 @@ interface ChatPageClientProps {
   initialMessages: Message[];
   onboardingComplete: boolean;
   quickLogButtons: QuickLogButton[];
+  initialInput?: string;
 }
 
 export default function ChatPageClient({
   initialMessages,
   onboardingComplete: initialOnboardingComplete,
   quickLogButtons,
+  initialInput,
 }: ChatPageClientProps) {
   const router = useRouter();
   const [onboardingComplete, setOnboardingComplete] = useState(
@@ -36,6 +38,7 @@ export default function ChatPageClient({
           onboardingComplete={onboardingComplete}
           onOnboardingComplete={handleOnboardingComplete}
           quickLogButtons={quickLogButtons}
+          initialInput={initialInput}
         />
       </div>
     </div>

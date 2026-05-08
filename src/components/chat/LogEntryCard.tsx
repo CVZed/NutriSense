@@ -12,6 +12,12 @@ interface LogEntryCardProps {
   onEdit?: (updatedStructuredData: Record<string, unknown>, newLoggedAt?: string) => void;
   /** Enable swipe-left-to-delete gesture (Timeline view only) */
   swipeable?: boolean;
+  /** When true, show a circular checkbox overlay and disable swipe/edit */
+  selectable?: boolean;
+  /** Whether this card is currently selected (only meaningful when selectable=true) */
+  selected?: boolean;
+  /** Called when the card is tapped in selectable mode */
+  onSelect?: () => void;
 }
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; emoji: string; accent: string }> = {
@@ -197,7 +203,7 @@ function Field({
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function LogEntryCard({ entryType, data, loggedAt, onDelete, onEdit, swipeable = false }: LogEntryCardProps) {
+export default function LogEntryCard({ entryType, data, loggedAt, onDelete, onEdit, swipeable = false, selectable = false, selected = false, onSelect }: LogEntryCardProps) {
   const config = TYPE_CONFIG[entryType] ?? TYPE_CONFIG.note;
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [fields, setFields] = useState<Record<string, string>>(() => initFields(entryType, data, loggedAt));
@@ -292,6 +298,66 @@ export default function LogEntryCard({ entryType, data, loggedAt, onDelete, onEd
   };
 
   if (deleted) return null;
+
+  // In selectable mode, the whole card becomes a tap target
+  if (selectable) {
+    return (
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          "w-full text-left rounded-xl border px-3 py-2.5 text-sm relative",
+          config.color,
+          selected && "ring-2 ring-brand-500",
+        )}
+      >
+        {/* Circular checkbox overlay */}
+        <span
+          className={cn(
+            "absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center",
+            selected
+              ? "bg-brand-500 border-brand-500"
+              : "bg-white border-gray-300",
+          )}
+        >
+          {selected && (
+            <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none">
+              <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </span>
+
+        {/* ── Header row ── */}
+        <div className="flex items-center gap-1.5 mb-1.5 pr-7">
+          <span>{config.emoji}</span>
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            {config.label}
+          </span>
+        </div>
+
+        {(entryType === "food" || entryType === "drink") && (
+          <div className="space-y-1">
+            <p className="font-medium text-gray-900 text-sm">
+              {String(data.name ?? "Unknown item")}
+              {data.quantity && data.unit ? ` · ${data.quantity} ${data.unit}` : ""}
+            </p>
+            {(data.calories || data.protein_g) ? (
+              <div className="flex gap-3 flex-wrap">
+                {data.calories != null && <StatPill label="cal" value={Math.round(Number(data.calories))} />}
+                {data.protein_g != null && <StatPill label="protein" value={`${Math.round(Number(data.protein_g))}g`} />}
+              </div>
+            ) : null}
+          </div>
+        )}
+        {(entryType === "exercise") && (
+          <p className="font-medium text-gray-900 text-sm">
+            {String(data.activity_type ?? "Exercise")}
+            {data.duration_min ? ` · ${data.duration_min}min` : ""}
+          </p>
+        )}
+      </button>
+    );
+  }
 
   const cardContent = (
     <div

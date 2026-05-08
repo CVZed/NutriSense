@@ -9,7 +9,12 @@ type ConversationMessage = Pick<Database["public"]["Tables"]["conversation_messa
 type LogEntryLoggedAt = Pick<Database["public"]["Tables"]["log_entries"]["Row"], "logged_at">;
 type LogEntryType = Pick<Database["public"]["Tables"]["log_entries"]["Row"], "entry_type">;
 
-export default async function ChatPage() {
+export default async function ChatPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ prompt?: string }>;
+}) {
+  const { prompt } = await searchParams;
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -149,6 +154,7 @@ export default async function ChatPage() {
       initialMessages={initialMessages}
       onboardingComplete={onboardingComplete}
       quickLogButtons={quickLogButtons}
+      initialInput={prompt}
     />
   );
 }
