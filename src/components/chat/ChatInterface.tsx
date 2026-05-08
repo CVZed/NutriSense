@@ -57,6 +57,24 @@ export default function ChatInterface({
 
   const [sessionId] = useState(() => crypto.randomUUID());
 
+  // ── Pending prompt chip (from ?prompt= URL param) ─────────────────────────
+  // Instead of silently pre-filling the text box, show a dismissable chip so
+  // the user consciously confirms before it's sent.
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(
+    initialInput?.trim() || null
+  );
+
+  // Clean up the URL param on mount so a page refresh doesn't re-show the chip
+  useEffect(() => {
+    if (initialInput?.trim() && typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("prompt")) {
+        url.searchParams.delete("prompt");
+        window.history.replaceState({}, "", url.toString());
+      }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Image attachment state ────────────────────────────────────────────────
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
@@ -83,7 +101,6 @@ export default function ChatInterface({
     useChat({
       api: "/api/chat",
       initialMessages,
-      initialInput: initialInput ?? "",
       body: { sessionId, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       onFinish: (message) => {
         if (
@@ -411,8 +428,38 @@ export default function ChatInterface({
         </div>
       )}
 
+      {/* Pending prompt chip — from ?prompt= URL (e.g. Plan tab "Mark Done") */}
+      {pendingPrompt && (
+        <div className="bg-brand-50 border-t border-brand-100 px-3 py-2.5 flex items-start gap-2 flex-shrink-0">
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-brand-600 font-semibold uppercase tracking-widest mb-1">📋 Ready to log</p>
+            <p className="text-sm text-gray-700 line-clamp-2">{pendingPrompt}</p>
+          </div>
+          <div className="flex-shrink-0 flex gap-1.5 mt-0.5">
+            <button
+              onClick={() => {
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                void append({ role: "user", content: pendingPrompt }, { body: { sessionId, timezone: tz } });
+                setPendingPrompt(null);
+              }}
+              disabled={isLoading}
+              className="bg-brand-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 hover:bg-brand-600 transition-colors"
+            >
+              Send
+            </button>
+            <button
+              onClick={() => setPendingPrompt(null)}
+              className="w-7 h-7 rounded-full bg-white border border-brand-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+              aria-label="Dismiss"
+            >
+              <X className="w-3 h-3 text-gray-500" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Smart contextual chips — visible when input is empty */}
-      {onboardingComplete && !input.trim() && !isLoading && messageQueue.length === 0 && (
+      {onboardingComplete && !input.trim() && !isLoading && messageQueue.length === 0 && !pendingPrompt && (
         <div className="bg-white border-t border-gray-100 px-3 pt-2 pb-1 flex gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
           {smartChips.map((chip) => (
             <button
@@ -435,7 +482,7 @@ export default function ChatInterface({
       )}
 
       {/* Quick-log buttons (user-configured) */}
-      {onboardingComplete && quickLogButtons.filter(b => b.enabled).length > 0 && (
+      {onboardingComplete && !pendingPrompt && quickLogButtons.filter(b => b.enabled).length > 0 && (
         <div className="bg-white px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
           {quickLogButtons.filter(b => b.enabled).map(btn => (
             <button
