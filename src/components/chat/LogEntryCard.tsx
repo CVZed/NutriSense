@@ -213,6 +213,49 @@ export default function LogEntryCard({ entryType, data, loggedAt, onDelete, onEd
   const [deleting, setDeleting] = useState(false);
   const [deleted, setDeleted] = useState(false);
 
+  // ── Serving size multiplier ───────────────────────────────────────────────
+  // baseServingData holds the per-1-serving macros so any multiplier is always
+  // computed from the true baseline — even if the card was previously saved at 2×.
+  const initialServings = Number(data.servings_count ?? 1) || 1;
+  const baseServingData = useRef({
+    calories:  Number(data.calories  ?? 0) / initialServings,
+    protein_g: Number(data.protein_g ?? 0) / initialServings,
+    carbs_g:   Number(data.carbs_g   ?? 0) / initialServings,
+    fat_g:     Number(data.fat_g     ?? 0) / initialServings,
+    quantity:  Number(data.quantity  ?? 0) / initialServings,
+  });
+  const [activeMultiplier, setActiveMultiplier] = useState(initialServings);
+
+  const handleServing = async (mult: number) => {
+    if (!liveData.entry_id || saving) return;
+    setSaving(true);
+    const base = baseServingData.current;
+    const r1 = (n: number) => Math.round(n * 10) / 10;
+    const scaled: Record<string, unknown> = {
+      ...liveData,
+      calories:       Math.round(base.calories * mult),
+      protein_g:      r1(base.protein_g * mult),
+      carbs_g:        r1(base.carbs_g * mult),
+      fat_g:          r1(base.fat_g * mult),
+      quantity:       base.quantity > 0 ? r1(base.quantity * mult) : liveData.quantity,
+      servings_count: mult,
+    };
+    try {
+      const res = await fetch(`/api/log-entries/${liveData.entry_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ structured_data: scaled }),
+      });
+      if (res.ok) {
+        setLiveData(prev => ({ ...prev, ...scaled }));
+        setActiveMultiplier(mult);
+        onEdit?.(scaled);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ── Swipe-to-delete ────────────────────────────────────────────────────────
   const SWIPE_MAX = 80;
   const SWIPE_THRESHOLD = 60;
@@ -278,6 +321,17 @@ export default function LogEntryCard({ entryType, data, loggedAt, onDelete, onEd
       if (res.ok) {
         setLiveData((prev) => ({ ...prev, ...structured_data }));
         if (newLoggedAt) setLiveLoggedAt(newLoggedAt);
+        // Manual edit resets the serving baseline to the newly entered values
+        if (entryType === "food" || entryType === "drink") {
+          baseServingData.current = {
+            calories:  Number(structured_data.calories  ?? 0),
+            protein_g: Number(structured_data.protein_g ?? 0),
+            carbs_g:   Number(structured_data.carbs_g   ?? 0),
+            fat_g:     Number(structured_data.fat_g     ?? 0),
+            quantity:  Number(structured_data.quantity  ?? 0),
+          };
+          setActiveMultiplier(1);
+        }
         onEdit?.(structured_data, newLoggedAt);
         setMode("view");
       }
@@ -449,6 +503,30 @@ export default function LogEntryCard({ entryType, data, loggedAt, onDelete, onEd
                   {liveData.fat_g != null && <StatPill label="fat" value={`${Math.round(Number(liveData.fat_g))}g`} />}
                 </div>
               ) : null}
+
+              {/* Serving size buttons — only for persisted entries */}
+              {!!liveData.entry_id && (
+                <div className="flex items-center gap-1 pt-0.5">
+                  <span className="text-[10px] text-gray-400 mr-0.5">servings</span>
+                  {([0.5, 1, 1.5, 2, 3] as const).map(mult => (
+                    <button
+                      key={mult}
+                      type="button"
+                      onClick={() => handleServing(mult)}
+                      disabled={saving}
+                      className={cn(
+                        "text-[10px] font-semibold px-1.5 py-0.5 rounded-full border transition-colors disabled:opacity-40",
+                        activeMultiplier === mult
+                          ? "bg-green-500 border-green-500 text-white"
+                          : "bg-white border-gray-200 text-gray-500 hover:border-green-400 hover:text-green-600"
+                      )}
+                    >
+                      {mult}×
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {liveLoggedAt && (
                 <p className="text-[10px] text-gray-400">{fmtTime(liveLoggedAt)}</p>
               )}
