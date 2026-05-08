@@ -517,7 +517,11 @@ function SaveMealModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), emoji, items }),
       });
-      if (!res.ok) { setError("Failed to save meal. Please try again."); return; }
+      if (!res.ok) {
+        const msg = await res.text().catch(() => "");
+        setError(msg || "Failed to save meal. Please try again.");
+        return;
+      }
       onSaved();
     } catch {
       setError("Something went wrong.");

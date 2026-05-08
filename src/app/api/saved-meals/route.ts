@@ -38,7 +38,10 @@ export async function GET() {
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
-  if (error) return new Response("DB error", { status: 500 });
+  if (error) {
+    console.error("[saved-meals GET]", error);
+    return new Response(error.message ?? "DB error", { status: 500 });
+  }
   return Response.json(data ?? []);
 }
 
@@ -84,6 +87,9 @@ export async function POST(req: Request) {
     .select()
     .single();
 
-  if (error) return new Response("DB error", { status: 500 });
+  if (error) {
+    console.error("[saved-meals POST]", error);
+    return new Response(error.message ?? "DB error", { status: 500 });
+  }
   return Response.json(data, { status: 201 });
 }
