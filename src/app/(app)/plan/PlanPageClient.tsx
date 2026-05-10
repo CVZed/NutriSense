@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import WeekView from "./WeekView";
 import MealsView from "./MealsView";
@@ -25,6 +25,14 @@ export default function PlanPageClient({
 }: PlanPageClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("week");
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [router]);
 
   function refresh() {
     router.refresh();

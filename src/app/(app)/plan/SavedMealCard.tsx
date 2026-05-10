@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { SavedMeal } from "@/types/database";
 
 interface SavedMealCardProps {
@@ -10,10 +9,42 @@ interface SavedMealCardProps {
 }
 
 export default function SavedMealCard({ meal, onRefresh }: SavedMealCardProps) {
-  const router = useRouter();
-  const [addingQuickLog, setAddingQuickLog] = useState(false);
-  const [quickLogSuccess, setQuickLogSuccess] = useState(false);
+  const [logging, setLogging] = useState(false);
+  const [logSuccess, setLogSuccess] = useState(false);
+  const [logError, setLogError] = useState(false);
+  const [addingPin, setAddingPin] = useState(false);
+  const [pinSuccess, setPinSuccess] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  async function handleLogNow() {
+    if (logging || logSuccess) return;
+    setLogging(true);
+    setLogError(false);
+    try {
+      await Promise.all(
+        meal.items.map(item =>
+          fetch("/api/log-entries", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              entry_type: item.entry_type,
+              structured_data: item.structured_data,
+              ai_confidence: "high",
+              data_source: "text",
+              raw_text: item.structured_data.name,
+            }),
+          }).then(res => { if (!res.ok) throw new Error(); })
+        )
+      );
+      setLogSuccess(true);
+      setTimeout(() => setLogSuccess(false), 2000);
+    } catch {
+      setLogError(true);
+      setTimeout(() => setLogError(false), 2000);
+    } finally {
+      setLogging(false);
+    }
+  }
 
   function buildLogPrompt(m: SavedMeal): string {
     if (m.items.length === 0) return `Log ${m.name}`;
@@ -23,12 +54,8 @@ export default function SavedMealCard({ meal, onRefresh }: SavedMealCardProps) {
     return `Log ${m.name}: ${itemsList}`;
   }
 
-  function handleLogNow() {
-    router.push("/chat?prompt=" + encodeURIComponent(buildLogPrompt(meal)));
-  }
-
-  async function handleAddToQuickLog() {
-    setAddingQuickLog(true);
+  async function handlePinToChat() {
+    setAddingPin(true);
     try {
       const button = {
         id: crypto.randomUUID(),
@@ -43,12 +70,12 @@ export default function SavedMealCard({ meal, onRefresh }: SavedMealCardProps) {
         body: JSON.stringify({ button }),
       });
       if (res.ok) {
-        setQuickLogSuccess(true);
-        setTimeout(() => setQuickLogSuccess(false), 2000);
+        setPinSuccess(true);
+        setTimeout(() => setPinSuccess(false), 2000);
         onRefresh();
       }
     } finally {
-      setAddingQuickLog(false);
+      setAddingPin(false);
     }
   }
 
@@ -64,6 +91,13 @@ export default function SavedMealCard({ meal, onRefresh }: SavedMealCardProps) {
   }
 
   const hasMacros = meal.total_calories > 0 || meal.total_protein_g > 0;
+
+  function logButtonLabel() {
+    if (logError) return "Error — try again";
+    if (logSuccess) return "✓ Logged!";
+    if (logging) return "Logging…";
+    return "Log Now";
+  }
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl p-4 flex flex-col gap-3">
@@ -110,20 +144,27 @@ export default function SavedMealCard({ meal, onRefresh }: SavedMealCardProps) {
       <div className="flex gap-2">
         <button
           onClick={handleLogNow}
-          className="flex-1 bg-brand-500 text-white text-xs font-semibold py-2 rounded-xl hover:bg-brand-600 transition-colors"
+          disabled={logging || logSuccess}
+          className={`flex-1 text-xs font-semibold py-2 rounded-xl transition-colors disabled:opacity-70 ${
+            logError
+              ? "bg-red-500 text-white"
+              : logSuccess
+              ? "bg-green-500 text-white"
+              : "bg-brand-500 text-white hover:bg-brand-600"
+          }`}
         >
-          Log Now
+          {logButtonLabel()}
         </button>
         <button
-          onClick={handleAddToQuickLog}
-          disabled={addingQuickLog || quickLogSuccess}
+          onClick={handlePinToChat}
+          disabled={addingPin || pinSuccess}
           className={`flex-1 text-xs font-semibold py-2 rounded-xl border transition-colors disabled:opacity-60 ${
-            quickLogSuccess
+            pinSuccess
               ? "bg-green-50 border-green-300 text-green-700"
               : "border-gray-200 text-gray-600 hover:bg-gray-50"
           }`}
         >
-          {quickLogSuccess ? "✓ Added!" : addingQuickLog ? "Adding…" : "Quick Log"}
+          {pinSuccess ? "✓ Pinned!" : addingPin ? "Pinning…" : "Pin to Chat"}
         </button>
       </div>
     </div>

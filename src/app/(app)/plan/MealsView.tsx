@@ -25,7 +25,7 @@ export default function MealsView({ savedMeals, onRefresh }: MealsViewProps) {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="px-4 py-4 grid grid-cols-1 gap-3">
+      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
         {savedMeals.map(meal => (
           <SavedMealCard
             key={meal.id}
