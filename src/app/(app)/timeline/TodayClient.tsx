@@ -613,12 +613,20 @@ export default function TodayClient({
     e => selectedIds.has(e.id) && (e.entry_type === "food" || e.entry_type === "drink")
   );
 
-  // Refresh server data every time this tab is visited
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { router.refresh(); }, []);
-
-  // Sync local state when server re-renders with fresh data
+  // Sync local state when server re-renders with fresh data (navigation, visibility refresh)
   useEffect(() => { setEntries(initialEntries); }, [initialEntries]);
+
+  // Refresh when the user switches back from another app (e.g. camera).
+  // Do NOT use a mount-time router.refresh() here — it fires while the page is
+  // still loading and the async response can arrive *after* a user edit, which
+  // would overwrite the edit and revert it to the original timestamp.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [router]);
 
   const windowStartMs = useMemo(() => new Date(windowStartIso).getTime(), [windowStartIso]);
   const nowMs = useMemo(() => new Date(nowIso).getTime(), [nowIso]);
