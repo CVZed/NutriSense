@@ -87,7 +87,7 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
   const [quickTrend, setQuickTrend] = useState<{ text: string; confidence: "low" | "medium" | "high" } | null>(null);
   const [seenTrends, setSeenTrends] = useState<string[]>([]);
   const [trendExpanded, setTrendExpanded] = useState(false);
-  const qaInputRef = useRef<HTMLInputElement>(null);
+  const qaInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Separate useChat for the trend deep-dive + follow-up conversation
   const {
@@ -114,6 +114,14 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
     api: "/api/insights-chat",
     body: { timezone: tz, days },
   });
+
+  // Auto-resize the Q&A textarea whenever its value changes (e.g. chip pre-fill)
+  useEffect(() => {
+    const ta = qaInputRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, [qaInput]);
 
   const fetchTrend = useCallback(async (exclude: string[]) => {
     setTrendStatus("loading");
@@ -542,19 +550,33 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
               {qaLoading && <DotsLoader />}
 
               {/* Input */}
-              <form onSubmit={handleQaSubmit} className="flex gap-2">
-                <input
+              <form onSubmit={handleQaSubmit} className="flex gap-2 items-end">
+                <textarea
                   ref={qaInputRef}
                   value={qaInput}
-                  onChange={handleQaInputChange}
+                  rows={1}
+                  onChange={e => {
+                    handleQaInputChange(e as unknown as React.ChangeEvent<HTMLInputElement>);
+                    const ta = e.currentTarget;
+                    ta.style.height = "auto";
+                    ta.style.height = `${ta.scrollHeight}px`;
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (!qaLoading && qaInput.trim()) {
+                        e.currentTarget.closest("form")?.requestSubmit();
+                      }
+                    }
+                  }}
                   placeholder="e.g. How's my protein this week?"
                   disabled={qaLoading}
-                  className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:border-brand-400 disabled:opacity-50"
+                  className="flex-1 resize-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:border-brand-400 disabled:opacity-50 overflow-hidden"
                 />
                 <button
                   type="submit"
                   disabled={qaLoading || !qaInput.trim()}
-                  className="bg-brand-500 text-white rounded-xl px-3 py-2 text-sm font-medium disabled:opacity-40"
+                  className="flex-shrink-0 bg-brand-500 text-white rounded-xl px-3 py-2 text-sm font-medium disabled:opacity-40"
                 >
                   Ask
                 </button>
@@ -567,7 +589,7 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
                     <button
                       key={q.label}
                       onClick={() => {
-                        handleQaInputChange({ target: { value: q.message } } as React.ChangeEvent<HTMLInputElement>);
+                        handleQaInputChange({ target: { value: q.message } } as unknown as React.ChangeEvent<HTMLInputElement>);
                         qaInputRef.current?.focus();
                       }}
                       className="flex-shrink-0 bg-gray-100 hover:bg-brand-50 hover:text-brand-700 active:bg-brand-100 text-gray-600 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap"
