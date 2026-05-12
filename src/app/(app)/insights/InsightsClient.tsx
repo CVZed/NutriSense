@@ -102,6 +102,19 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
     body: { timezone: tz, days },
   });
 
+  // Separate useChat for the "Ask your data" Q&A section
+  const {
+    messages: qaMessages,
+    input: qaInput,
+    handleInputChange: handleQaInputChange,
+    handleSubmit: handleQaSubmit,
+    append: appendQa,
+    isLoading: qaLoading,
+  } = useChat({
+    api: "/api/insights-chat",
+    body: { timezone: tz, days },
+  });
+
   const fetchTrend = useCallback(async (exclude: string[]) => {
     setTrendStatus("loading");
     setTrendExpanded(false);
@@ -232,6 +245,20 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
 
   // Filter AI messages to show (skip the auto-trigger user message)
   const visibleMessages = messages.filter((m, i) => !(i === 0 && m.role === "user"));
+
+  // Suggested questions for the Q&A section
+  const SUGGESTED_QUESTIONS = [
+    { label: "💪 Protein goal",    message: "How am I tracking on protein vs my daily goal this week? Am I consistently hitting it?" },
+    { label: "🔥 Calorie trend",   message: "What's the trend in my calorie intake over the past week? Am I above or below my goal most days?" },
+    { label: "📈 Progress check",  message: "Based on my recent logs, am I making progress toward my health goal? What's working and what isn't?" },
+    { label: "😴 Sleep impact",    message: "How has my sleep been this week, and do you see any connection between sleep and how I eat or feel?" },
+    { label: "🏋️ Exercise recap",  message: "Summarize my exercise activity and calories burned this week. How does it compare to a good week?" },
+    { label: "⚖️ Macro balance",   message: "How balanced are my macros — protein, carbs, and fat — compared to my goals? Any consistent gaps?" },
+    { label: "📅 Best day",        message: "Which day this week had the best overall nutrition? What made it better than the others?" },
+    { label: "🍽️ Biggest meals",   message: "When am I eating the most calories during the day? Breakfast, lunch, dinner, or snacks?" },
+  ] as const;
+
+  const qaVisibleMessages = qaMessages.filter((m, i) => !(i === 0 && m.role === "user"));
 
   return (
     <div className="flex flex-col h-full">
@@ -483,6 +510,70 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
                       </button>
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Ask your data ── */}
+        {hasAnyData && (
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="px-4 pt-4 pb-3 border-b border-gray-50">
+              <p className="text-sm font-semibold text-gray-900">💬 Ask your data</p>
+              <p className="text-xs text-gray-400">Ask anything about your logs</p>
+            </div>
+
+            <div className="px-4 py-3 space-y-3">
+              {/* Conversation */}
+              {qaVisibleMessages.map((m) => (
+                <div key={m.id}>
+                  {m.role === "assistant" ? (
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                  ) : (
+                    <div className="flex justify-end">
+                      <div className="bg-brand-500 text-white text-sm rounded-2xl rounded-tr-sm px-3 py-2 max-w-[85%]">
+                        {m.content}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {qaLoading && <DotsLoader />}
+
+              {/* Input */}
+              <form onSubmit={handleQaSubmit} className="flex gap-2">
+                <input
+                  value={qaInput}
+                  onChange={handleQaInputChange}
+                  placeholder="e.g. How's my protein this week?"
+                  disabled={qaLoading}
+                  className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:border-brand-400 disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={qaLoading || !qaInput.trim()}
+                  className="bg-brand-500 text-white rounded-xl px-3 py-2 text-sm font-medium disabled:opacity-40"
+                >
+                  Ask
+                </button>
+              </form>
+
+              {/* Suggested question chips — hidden once conversation starts */}
+              {qaVisibleMessages.length === 0 && !qaLoading && (
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                  {SUGGESTED_QUESTIONS.map((q) => (
+                    <button
+                      key={q.label}
+                      onClick={() => void appendQa(
+                        { role: "user", content: q.message },
+                        { body: { timezone: tz, days } }
+                      )}
+                      className="flex-shrink-0 bg-gray-100 hover:bg-brand-50 hover:text-brand-700 active:bg-brand-100 text-gray-600 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap"
+                    >
+                      {q.label}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
