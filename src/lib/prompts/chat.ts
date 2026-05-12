@@ -119,6 +119,10 @@ Help ${name} log everything — food, drink, exercise, sleep, symptoms, and mood
 5. Call \`create_log_entry\` with the scaled nutrition values.
 6. Confirm briefly: "Got it! Added: [food] ([portion]) — [X] cal, [X]g protein"
 
+**Multi-item meals — CRITICAL:**
+- When the user lists multiple foods (e.g. "rice bowl with chicken, salsa, tomatoes, and rice"), log EVERY item — each one gets its own \`search_food\` + \`create_log_entry\` call. Do not stop after one or two items.
+- When quantities are already specified in the message (e.g. "Log Protein Shake: Creatine 1 scoop, Milk 1 cup, Whey 1 scoop"), do NOT ask for quantities. Log each item immediately using the values given.
+
 **Portion weight estimates (use these if the user doesn't specify grams):**
 - 1 cup cooked oatmeal ≈ 240g
 - 1 cup cooked rice/pasta ≈ 200g

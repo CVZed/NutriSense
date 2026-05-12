@@ -17,6 +17,7 @@ export interface QuickLogButton {
   label: string;
   message: string;  // sent verbatim to Claude when tapped
   enabled: boolean; // false = hidden from chat bar but preserved in profile
+  saved_meal_items?: SavedMealItem[]; // if present, POST directly instead of going through AI
 }
 
 export const DEFAULT_QUICK_LOG_BUTTONS: QuickLogButton[] = [

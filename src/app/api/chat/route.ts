@@ -185,7 +185,7 @@ export async function POST(req: Request) {
         system: systemPrompt,
         messages: processedMessages,
         maxTokens: 512,
-        maxSteps: 4,
+        maxSteps: 16,
 
         tools: isOnboarding
           ? {

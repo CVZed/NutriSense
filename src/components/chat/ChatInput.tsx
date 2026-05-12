@@ -1,7 +1,7 @@
 "use client";
 
-import { type FormEvent, useRef } from "react";
-import { Send, Camera, X, ScanBarcode } from "lucide-react";
+import { type FormEvent, useRef, useState, useEffect } from "react";
+import { Send, Camera, ScanBarcode, Sparkles, Zap, Image as ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -15,7 +15,13 @@ interface ChatInputProps {
   onImageSelect: (file: File | null) => void;
   isUploading?: boolean;
   onBarcodeScan?: () => void;
-  onQueue?: () => void;
+  // Smart chips toggle
+  onToggleSmartChips?: () => void;
+  smartChipsVisible?: boolean;
+  // Quick log toggle
+  onToggleQuickLog?: () => void;
+  quickLogVisible?: boolean;
+  hasQuickLogButtons?: boolean;
 }
 
 export default function ChatInput({
@@ -28,10 +34,30 @@ export default function ChatInput({
   onImageSelect,
   isUploading = false,
   onBarcodeScan,
-  onQueue,
+  onToggleSmartChips,
+  smartChipsVisible,
+  onToggleQuickLog,
+  quickLogVisible,
+  hasQuickLogButtons,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraFileInputRef = useRef<HTMLInputElement>(null);   // capture="environment"
+  const galleryFileInputRef = useRef<HTMLInputElement>(null);  // no capture (library)
+  const cameraMenuRef = useRef<HTMLDivElement>(null);
+
+  const [showCameraMenu, setShowCameraMenu] = useState(false);
+
+  // Close camera menu on outside click
+  useEffect(() => {
+    if (!showCameraMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (cameraMenuRef.current && !cameraMenuRef.current.contains(e.target as Node)) {
+        setShowCameraMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showCameraMenu]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -48,7 +74,6 @@ export default function ChatInput({
     const ta = textareaRef.current;
     if (ta) {
       ta.style.height = "auto";
-      // Cap at 5 lines (~100px) so the input never dominates the screen on mobile
       ta.style.height = `${Math.min(ta.scrollHeight, 100)}px`;
     }
   }
@@ -56,15 +81,13 @@ export default function ChatInput({
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
     onImageSelect(file);
-    e.target.value = ""; // reset so same file can be re-selected
+    e.target.value = "";
+    setShowCameraMenu(false);
   }
 
-  const busy = isLoading || isUploading;
   const hasContent = input.trim().length > 0 || !!pendingImage;
-  // Send requires content AND not busy
-  const canSend = hasContent && !busy;
-  // Queue works whenever there's content — even while AI is responding
-  const canQueue = hasContent;
+  // Allow sending (or queuing) as long as we're not actively uploading
+  const canSend = hasContent && !isUploading;
 
   return (
     <div className="bg-white border-t border-gray-100 px-3 pt-2 pb-4 flex-shrink-0">
@@ -86,7 +109,7 @@ export default function ChatInput({
               className="w-5 h-5 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors mt-0.5"
               aria-label="Remove photo"
             >
-              <X className="w-3 h-3 text-gray-600" />
+              <span className="text-xs text-gray-600 leading-none">×</span>
             </button>
           )}
           <p className="text-xs text-gray-400 mt-1">
@@ -96,17 +119,24 @@ export default function ChatInput({
       )}
 
       <form onSubmit={onSubmit} className="flex flex-col gap-2">
-        {/* Hidden file input */}
+        {/* Hidden file inputs */}
         <input
-          ref={fileInputRef}
+          ref={cameraFileInputRef}
           type="file"
           accept="image/*"
           capture="environment"
           className="hidden"
           onChange={handleFileChange}
         />
+        <input
+          ref={galleryFileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
 
-        {/* Row 1: Text area — full width */}
+        {/* Row 1: Text area */}
         <div className="bg-gray-100 rounded-2xl flex items-end">
           <textarea
             ref={textareaRef}
@@ -121,72 +151,114 @@ export default function ChatInput({
 
         {/* Row 2: Action buttons */}
         <div className="flex items-center gap-2">
-          {/* Camera — always available so photos can be queued while AI thinks */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            className={cn(
-              "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors",
-              pendingImage
-                ? "text-brand-500 bg-brand-50"
-                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100",
-              isUploading && "opacity-40 cursor-not-allowed"
-            )}
-            aria-label="Attach photo"
-          >
-            <Camera className="w-5 h-5" />
-          </button>
 
-          {/* Barcode — always available so scans can be queued while AI thinks */}
-          {onBarcodeScan && (
+          {/* Camera — tap to open action menu */}
+          <div className="relative flex-shrink-0" ref={cameraMenuRef}>
             <button
               type="button"
-              onClick={onBarcodeScan}
+              onClick={() => setShowCameraMenu(v => !v)}
               disabled={isUploading}
               className={cn(
-                "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors",
-                "text-gray-400 hover:text-gray-600 hover:bg-gray-100",
+                "w-9 h-9 rounded-full flex items-center justify-center transition-colors",
+                pendingImage
+                  ? "text-brand-500 bg-brand-50"
+                  : showCameraMenu
+                  ? "text-gray-700 bg-gray-200"
+                  : "text-gray-400 hover:text-gray-600 hover:bg-gray-100",
                 isUploading && "opacity-40 cursor-not-allowed"
               )}
-              aria-label="Scan barcode"
+              aria-label="Photo options"
             >
-              <ScanBarcode className="w-5 h-5" />
+              <Camera className="w-5 h-5" />
+            </button>
+
+            {/* Camera action sheet */}
+            {showCameraMenu && (
+              <div className="absolute bottom-full left-0 mb-2 z-50 bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden w-48">
+                <button
+                  type="button"
+                  onClick={() => cameraFileInputRef.current?.click()}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Camera className="w-4 h-4 text-gray-500" />
+                  Take Photo
+                </button>
+                <div className="border-t border-gray-100" />
+                <button
+                  type="button"
+                  onClick={() => galleryFileInputRef.current?.click()}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <ImageIcon className="w-4 h-4 text-gray-500" />
+                  Photo Library
+                </button>
+                {onBarcodeScan && (
+                  <>
+                    <div className="border-t border-gray-100" />
+                    <button
+                      type="button"
+                      onClick={() => { setShowCameraMenu(false); onBarcodeScan(); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <ScanBarcode className="w-4 h-4 text-gray-500" />
+                      Scan Barcode
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Smart chips toggle (brain/sparkle icon) */}
+          {onToggleSmartChips && (
+            <button
+              type="button"
+              onClick={onToggleSmartChips}
+              className={cn(
+                "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors",
+                smartChipsVisible
+                  ? "text-brand-600 bg-brand-50"
+                  : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              )}
+              aria-label="Toggle suggestions"
+            >
+              <Sparkles className="w-5 h-5" />
+            </button>
+          )}
+
+          {/* Quick log toggle (bolt icon) — only when there are pinned buttons */}
+          {onToggleQuickLog && hasQuickLogButtons && (
+            <button
+              type="button"
+              onClick={onToggleQuickLog}
+              className={cn(
+                "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors",
+                quickLogVisible
+                  ? "text-blue-600 bg-blue-50"
+                  : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              )}
+              aria-label="Toggle quick log"
+            >
+              <Zap className="w-5 h-5" />
             </button>
           )}
 
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Queue button */}
-          {onQueue && (
-            <button
-              type="button"
-              onClick={onQueue}
-              disabled={!canQueue}
-              className={cn(
-                "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all font-bold text-sm",
-                canQueue
-                  ? "bg-gray-200 text-gray-600 hover:bg-gray-300 active:scale-95"
-                  : "bg-gray-100 text-gray-300 cursor-not-allowed"
-              )}
-              aria-label="Add to queue"
-            >
-              Q
-            </button>
-          )}
-
-          {/* Send */}
+          {/* Send — also works as queue trigger when AI is busy */}
           <button
             type="submit"
             disabled={!canSend}
             className={cn(
               "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all",
               canSend
-                ? "bg-brand-500 text-white shadow-sm hover:bg-brand-600 active:scale-95"
+                ? isLoading
+                  ? "bg-gray-400 text-white shadow-sm active:scale-95"
+                  : "bg-brand-500 text-white shadow-sm hover:bg-brand-600 active:scale-95"
                 : "bg-gray-200 text-gray-400"
             )}
-            aria-label="Send message"
+            aria-label={isLoading ? "Add to queue" : "Send message"}
           >
             <Send className="w-4 h-4" />
           </button>

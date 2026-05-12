@@ -33,8 +33,8 @@ function fileToBase64(file: File): Promise<string> {
 interface QueueItem {
   id: string;
   text: string;
-  previewUrl?: string;   // object URL for display (revoked after send)
-  imageFile?: File;      // original File for upload when draining
+  previewUrl?: string;
+  imageFile?: File;
 }
 
 interface ChatInterfaceProps {
@@ -58,13 +58,10 @@ export default function ChatInterface({
   const [sessionId] = useState(() => crypto.randomUUID());
 
   // ── Pending prompt chip (from ?prompt= URL param) ─────────────────────────
-  // Instead of silently pre-filling the text box, show a dismissable chip so
-  // the user consciously confirms before it's sent.
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(
     initialInput?.trim() || null
   );
 
-  // Clean up the URL param on mount so a page refresh doesn't re-show the chip
   useEffect(() => {
     if (initialInput?.trim() && typeof window !== "undefined") {
       const url = new URL(window.location.href);
@@ -86,6 +83,13 @@ export default function ChatInterface({
 
   // ── Message queue state ───────────────────────────────────────────────────
   const [messageQueue, setMessageQueue] = useState<QueueItem[]>([]);
+
+  // ── Chip visibility state ─────────────────────────────────────────────────
+  const [smartChipsVisible, setSmartChipsVisible] = useState(true);
+  const [quickLogVisible, setQuickLogVisible] = useState(false);
+
+  // ── Quick log direct-post status ─────────────────────────────────────────
+  const [quickLogStatus, setQuickLogStatus] = useState<{ id: string; state: "logging" | "done" | "error" } | null>(null);
 
   function handleImageSelect(file: File | null) {
     if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
@@ -192,12 +196,9 @@ export default function ChatInterface({
     };
 
     setMessageQueue(prev => [...prev, item]);
-
-    // Clear input + image so the user can compose another message immediately
     handleInputChange({ target: { value: "" } } as ChangeEvent<HTMLInputElement>);
     setPendingImage(null);
     setImagePreviewUrl(null);
-    // Don't revoke previewUrl yet — we still show it in the queue bubble
   }, [input, pendingImage, imagePreviewUrl, handleInputChange]);
 
   // ── Queue: remove an item ─────────────────────────────────────────────────
@@ -233,7 +234,7 @@ export default function ChatInterface({
     }
   }, [append, sessionId, uploadImage]);
 
-  // ── Queue: auto-drain when AI finishes and input is empty ─────────────────
+  // ── Queue: auto-drain when AI finishes ───────────────────────────────────
   const prevLoadingRef = useRef(false);
   const inputRef = useRef(input);
   const messageQueueRef = useRef(messageQueue);
@@ -246,7 +247,6 @@ export default function ChatInterface({
     const wasLoading = prevLoadingRef.current;
     prevLoadingRef.current = isLoading;
 
-    // Only drain when loading transitions false AND user hasn't typed a reply
     if (wasLoading && !isLoading && messageQueueRef.current.length > 0 && !inputRef.current.trim()) {
       const timer = setTimeout(() => {
         const queue = messageQueueRef.current;
@@ -259,7 +259,7 @@ export default function ChatInterface({
     }
   }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Barcode detected → look up nutrition → send to AI ────────────────────
+  // ── Barcode detected ──────────────────────────────────────────────────────
   const handleBarcodeDetected = useCallback(async (barcode: string) => {
     setShowScanner(false);
     setBarcodeLoading(true);
@@ -313,11 +313,17 @@ export default function ChatInterface({
     scrollToBottom();
   }, [messages, isLoading, scrollToBottom]);
 
-  // ── Custom submit: upload image first, then hand off to useChat ──────────
+  // ── Custom submit: if AI is busy → auto-queue; otherwise send ────────────
   const handleFormSubmit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       if (!input.trim() && !pendingImage) return;
+
+      // Auto-queue when AI is still responding
+      if (isLoading && !isUploading) {
+        handleQueueMessage();
+        return;
+      }
 
       if (pendingImage) {
         setIsUploading(true);
@@ -338,11 +344,52 @@ export default function ChatInterface({
         return;
       }
 
-      // No image — normal submit
       handleSubmit(e);
     },
-    [input, pendingImage, imagePreviewUrl, handleSubmit, append, handleInputChange, sessionId, uploadImage]
+    [input, pendingImage, imagePreviewUrl, isLoading, isUploading, handleQueueMessage, handleSubmit, append, handleInputChange, sessionId, uploadImage]
   );
+
+  // ── Quick log button tap: direct-post if items present, else send to AI ──
+  const handleQuickLogTap = useCallback(async (btn: QuickLogButton) => {
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(10);
+
+    if (btn.saved_meal_items && btn.saved_meal_items.length > 0) {
+      // Direct post — no AI round-trip
+      setQuickLogStatus({ id: btn.id, state: "logging" });
+      try {
+        await Promise.all(
+          btn.saved_meal_items.map(item =>
+            fetch("/api/log-entries", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                entry_type: item.entry_type,
+                structured_data: item.structured_data,
+                ai_confidence: "high",
+                data_source: "text",
+                raw_text: item.structured_data.name,
+              }),
+            }).then(res => { if (!res.ok) throw new Error(); })
+          )
+        );
+        setQuickLogStatus({ id: btn.id, state: "done" });
+        setTimeout(() => setQuickLogStatus(null), 2000);
+      } catch {
+        setQuickLogStatus({ id: btn.id, state: "error" });
+        setTimeout(() => setQuickLogStatus(null), 2000);
+      }
+      return;
+    }
+
+    // Legacy / non-meal buttons → send to AI
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    void append(
+      { role: "user", content: btn.message },
+      { body: { sessionId, timezone: tz } }
+    );
+  }, [append, sessionId]);
+
+  const activeQuickLogButtons = quickLogButtons.filter(b => b.enabled);
 
   return (
     <div className="flex flex-col h-full">
@@ -381,7 +428,6 @@ export default function ChatInterface({
           </div>
         )}
 
-        {/* Log entry cards from the most recent AI response */}
         {currentLogEntries.length > 0 && !isLoading && (
           <div className="px-4 space-y-2">
             {currentLogEntries.map((entry, i) => (
@@ -398,7 +444,7 @@ export default function ChatInterface({
         <div ref={bottomRef} />
       </div>
 
-      {/* ── Queue bubbles ── */}
+      {/* Queue bubbles */}
       {messageQueue.length > 0 && (
         <div className="bg-white border-t border-gray-100 px-3 pt-2 pb-1 space-y-1.5 flex-shrink-0">
           <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-widest px-1">
@@ -428,7 +474,7 @@ export default function ChatInterface({
         </div>
       )}
 
-      {/* Pending prompt chip — from ?prompt= URL (e.g. Plan tab "Mark Done") */}
+      {/* Pending prompt chip */}
       {pendingPrompt && (
         <div className="bg-brand-50 border-t border-brand-100 px-3 py-2.5 flex items-start gap-2 flex-shrink-0">
           <div className="flex-1 min-w-0">
@@ -458,8 +504,8 @@ export default function ChatInterface({
         </div>
       )}
 
-      {/* Smart contextual chips — visible when input is empty */}
-      {onboardingComplete && !input.trim() && !isLoading && messageQueue.length === 0 && !pendingPrompt && (
+      {/* Smart contextual chips — toggled by brain icon */}
+      {onboardingComplete && smartChipsVisible && !input.trim() && !isLoading && messageQueue.length === 0 && !pendingPrompt && (
         <div className="bg-white border-t border-gray-100 px-3 pt-2 pb-1 flex gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
           {smartChips.map((chip) => (
             <button
@@ -481,26 +527,31 @@ export default function ChatInterface({
         </div>
       )}
 
-      {/* Quick-log buttons (user-configured) */}
-      {onboardingComplete && !pendingPrompt && quickLogButtons.filter(b => b.enabled).length > 0 && (
+      {/* Quick-log buttons — toggled by bolt icon */}
+      {onboardingComplete && quickLogVisible && !pendingPrompt && activeQuickLogButtons.length > 0 && (
         <div className="bg-white px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
-          {quickLogButtons.filter(b => b.enabled).map(btn => (
-            <button
-              key={btn.id}
-              disabled={isLoading}
-              onClick={() => {
-                if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(10);
-                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                void append(
-                  { role: "user", content: btn.message },
-                  { body: { sessionId, timezone: tz } }
-                );
-              }}
-              className="flex-shrink-0 flex items-center gap-1.5 bg-blue-50 text-blue-600 px-3 py-1.5 rounded-full text-xs font-medium active:bg-blue-100 disabled:opacity-40 transition-colors"
-            >
-              {btn.emoji} {btn.label}
-            </button>
-          ))}
+          {activeQuickLogButtons.map(btn => {
+            const status = quickLogStatus?.id === btn.id ? quickLogStatus.state : null;
+            return (
+              <button
+                key={btn.id}
+                disabled={isLoading && !btn.saved_meal_items?.length || status === "logging"}
+                onClick={() => handleQuickLogTap(btn)}
+                className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  status === "done"
+                    ? "bg-green-50 text-green-700"
+                    : status === "error"
+                    ? "bg-red-50 text-red-600"
+                    : status === "logging"
+                    ? "bg-blue-50 text-blue-400 opacity-70"
+                    : "bg-blue-50 text-blue-600 active:bg-blue-100"
+                }`}
+              >
+                {btn.emoji}{" "}
+                {status === "done" ? "✓ Logged!" : status === "error" ? "Error" : status === "logging" ? "Logging…" : btn.label}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -515,7 +566,11 @@ export default function ChatInterface({
         onImageSelect={handleImageSelect}
         isUploading={isUploading}
         onBarcodeScan={() => setShowScanner(true)}
-        onQueue={handleQueueMessage}
+        onToggleSmartChips={onboardingComplete ? () => setSmartChipsVisible(v => !v) : undefined}
+        smartChipsVisible={smartChipsVisible}
+        onToggleQuickLog={onboardingComplete ? () => setQuickLogVisible(v => !v) : undefined}
+        quickLogVisible={quickLogVisible}
+        hasQuickLogButtons={activeQuickLogButtons.length > 0}
       />
     </div>
   );

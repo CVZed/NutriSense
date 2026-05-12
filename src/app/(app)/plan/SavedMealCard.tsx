@@ -63,6 +63,7 @@ export default function SavedMealCard({ meal, onRefresh }: SavedMealCardProps) {
         label: meal.name,
         message: buildLogPrompt(meal),
         enabled: true,
+        saved_meal_items: meal.items,  // enables direct-post bypass of AI
       };
       const res = await fetch("/api/profile/quick-log", {
         method: "PATCH",
