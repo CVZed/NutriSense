@@ -26,7 +26,23 @@
       "Bash(gh --version)",
       "Bash(gh auth *)",
       "Bash(xargs ls *)",
-      "Bash(xargs cat *)"
+      "Bash(xargs cat *)",
+      "Bash(cat vercel.json)",
+      "Bash(ls -la .vercel)",
+      "Bash(git remote *)",
+      "Bash(cat next.config.ts)",
+      "Bash(cat next.config.js)",
+      "Bash(node -e \"const ai = require\\('ai'\\); console.log\\(Object.keys\\(ai\\).filter\\(k => k.includes\\('Stream'\\) || k.includes\\('stream'\\) || k.includes\\('Data'\\)\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(node -e \"try { const r = require\\('ai/react'\\); console.log\\('ai/react works:', Object.keys\\(r\\).slice\\(0,5\\).join\\(', '\\)\\); } catch\\(e\\) { console.log\\('ai/react error:', e.message\\); }\")",
+      "Bash(node -e \"const ai = require\\('ai'\\); const k = Object.keys\\(ai\\); console.log\\('useChat in ai:', k.includes\\('useChat'\\)\\); console.log\\('UIMessage in ai:', k.includes\\('UIMessage'\\)\\);\")",
+      "Bash(npm view *)",
+      "Bash(node -e \"const v=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const vers=JSON.parse\\(v\\); console.log\\('Latest v1:', vers.filter\\(v=>v.startsWith\\('1.'\\)\\).slice\\(-5\\).join\\(', '\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; vs=json.load\\(sys.stdin\\); [print\\(v\\) for v in vs if v.startswith\\('2.'\\)]\")",
+      "Bash(python3 -c \"import sys,json; vs=json.load\\(sys.stdin\\); [print\\(v\\) for v in vs if v.startswith\\('5.'\\)]\")",
+      "Bash(python3 -c \"import sys,json; vs=json.load\\(sys.stdin\\); [print\\(v\\) for v in vs if v.startswith\\('5.'\\) and 'alpha' not in v and 'beta' not in v and 'canary' not in v]\")",
+      "Bash(npm pack *)",
+      "Bash(python3 -c \"import sys,json; p=json.load\\(sys.stdin\\); [print\\(k,'->',str\\(v\\)[:80]\\) for k,v in \\(p.get\\('exports',{}\\) or {}\\).items\\(\\)]\")",
+      "Bash(node -e ' *)"
     ]
   }
 }
