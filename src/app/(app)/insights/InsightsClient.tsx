@@ -87,6 +87,7 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
   const [quickTrend, setQuickTrend] = useState<{ text: string; confidence: "low" | "medium" | "high" } | null>(null);
   const [seenTrends, setSeenTrends] = useState<string[]>([]);
   const [trendExpanded, setTrendExpanded] = useState(false);
+  const qaInputRef = useRef<HTMLInputElement>(null);
 
   // Separate useChat for the trend deep-dive + follow-up conversation
   const {
@@ -108,7 +109,6 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
     input: qaInput,
     handleInputChange: handleQaInputChange,
     handleSubmit: handleQaSubmit,
-    append: appendQa,
     isLoading: qaLoading,
   } = useChat({
     api: "/api/insights-chat",
@@ -544,6 +544,7 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
               {/* Input */}
               <form onSubmit={handleQaSubmit} className="flex gap-2">
                 <input
+                  ref={qaInputRef}
                   value={qaInput}
                   onChange={handleQaInputChange}
                   placeholder="e.g. How's my protein this week?"
@@ -565,10 +566,10 @@ export default function InsightsClient({ entries, profile, timezone }: Props) {
                   {SUGGESTED_QUESTIONS.map((q) => (
                     <button
                       key={q.label}
-                      onClick={() => void appendQa(
-                        { role: "user", content: q.message },
-                        { body: { timezone: tz, days } }
-                      )}
+                      onClick={() => {
+                        handleQaInputChange({ target: { value: q.message } } as React.ChangeEvent<HTMLInputElement>);
+                        qaInputRef.current?.focus();
+                      }}
                       className="flex-shrink-0 bg-gray-100 hover:bg-brand-50 hover:text-brand-700 active:bg-brand-100 text-gray-600 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap"
                     >
                       {q.label}
